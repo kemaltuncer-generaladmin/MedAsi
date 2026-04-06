@@ -1,0 +1,289 @@
+MEDASI — AI CONTEXT PROMPT
+Bu dosyayı herhangi bir yapay zekaya (ChatGPT, Claude, Gemini, Verdent vb.) konuşmanın başına yapıştır.
+Yapay zeka projeyi sıfırdan anlayacak ve doğrudan çözüm üretecek.
+═══════════════════════════════════════════════════════════════
+
+## PROJENİN KİMLİĞİ
+
+Proje Adı   : MEDASI (MED + ASI)
+Tip         : Tıbbi AI + Eğitim SaaS Platformu
+Hedef Kitle : Tıp öğrencileri, asistan hekimler, klinisyenler
+GitHub      : https://github.com/kemaltuncer-generaladmin/MedAsi
+Hosting     : Vercel (domain: medasi.com.tr)
+Durum       : Aktif geliştirme
+
+---
+
+## TEKNOLOJİ STACK (Kesinlikle değiştirme, bunlarla çalış)
+
+| Katman       | Teknoloji                          |
+|--------------|------------------------------------|
+| Framework    | Next.js 15 (App Router, TypeScript)|
+| Stil         | Tailwind CSS + CSS Variables       |
+| Veritabanı   | Supabase (PostgreSQL) + Prisma ORM |
+| Auth         | Supabase Auth                      |
+| AI           | Anthropic Claude API               |
+| State        | Zustand                            |
+| Form         | React Hook Form + Zod              |
+| Email        | Resend                             |
+| İkonlar      | lucide-react                       |
+
+---
+
+## KLASÖR YAPISI (Tam harita)
+
+/
+├── app/
+│   ├── (auth)/
+│   │   ├── layout.tsx              — Auth sayfaları wrapper
+│   │   ├── login/page.tsx          — Giriş sayfası
+│   │   └── register/page.tsx       — Kayıt sayfası
+│   ├── (dashboard)/
+│   │   ├── layout.tsx              — Auth korumalı dashboard wrapper
+│   │   ├── dashboard/page.tsx      — Ana dashboard
+│   │   ├── ai-diagnosis/page.tsx   — AI Tanı modülü (henüz boş)
+│   │   ├── case-rpg/page.tsx       — Vaka RPG modülü (henüz boş)
+│   │   ├── terminal/page.tsx       — Medikal Terminal (henüz boş)
+│   │   ├── ai-assistant/page.tsx   — AI Asistan (henüz boş)
+│   │   ├── daily-briefing/page.tsx — Günlük Brifing (henüz boş)
+│   │   ├── patients/page.tsx       — Hasta yönetimi (henüz boş)
+│   │   ├── cases/page.tsx          — Vaka yönetimi (henüz boş)
+│   │   ├── notes/page.tsx          — Notlar (henüz boş)
+│   │   └── pomodoro/page.tsx       — Pomodoro (henüz boş)
+│   ├── api/
+│   │   ├── patients/route.ts       — GET/POST hastalar
+│   │   ├── cases/route.ts          — GET/POST vakalar
+│   │   ├── ai/chat/route.ts        — AI mesajlaşma endpoint
+│   │   └── admin/users/route.ts    — Admin kullanıcı listesi
+│   ├── admin/                      — Admin panel (henüz boş)
+│   ├── page.tsx                    — Landing page (TAMAMLANDI)
+│   ├── layout.tsx                  — Root layout
+│   └── globals.css                 — Tailwind + token import
+│
+├── components/
+│   ├── ui/
+│   │   ├── Button.tsx              — variant: primary|secondary|ghost|destructive
+│   │   ├── Input.tsx               — label, error, hint destekli
+│   │   ├── Card.tsx                — variant: default|elevated|bordered
+│   │   ├── Badge.tsx               — variant: default|success|warning|destructive|secondary
+│   │   └── index.ts                — tüm exportlar
+│   └── layout/
+│       ├── DashboardShell.tsx      — sidebar+topbar+main wrapper
+│       ├── Sidebar.tsx             — sol nav, aktif link highlight
+│       ├── Topbar.tsx              — üst bar, kullanıcı avatarı
+│       └── index.ts
+│
+├── lib/
+│   ├── supabase/
+│   │   ├── server.ts               — Server Component client (cookies)
+│   │   └── client.ts               — Browser client
+│   ├── ai/
+│   │   ├── client.ts               — Anthropic client + AI_MODELS sabiti
+│   │   └── check-limit.ts          — Günlük AI limit kontrolü + loglama
+│   ├── actions/
+│   │   └── auth.ts                 — login(), register(), logout() server actions
+│   ├── schemas/
+│   │   ├── auth.ts                 — loginSchema, registerSchema (Zod)
+│   │   └── domain.ts               — patientSchema, caseSchema, noteSchema
+│   └── email/
+│       └── index.ts                — sendWelcomeEmail(), sendPasswordResetEmail()
+│
+├── stores/
+│   ├── auth.ts                     — useAuthStore (user state)
+│   └── ui.ts                       — useUIStore (sidebar open/close)
+│
+├── types/
+│   ├── domain.ts                   — User, Patient, Case, Session, Note, Package, Module
+│   ├── api.ts                      — ApiResponse, AIChatRequest, AIChatResponse, AIModel
+│   └── index.ts                    — tüm re-exportlar
+│
+├── constants/
+│   ├── modules.ts                  — 9 modül tanımı (id, name, aiModel)
+│   ├── packages.ts                 — student|clinic_pro|enterprise tanımları
+│   ├── ai.ts                       — AI_MODEL_MAP, AI_ERROR_MESSAGES
+│   └── routes.ts                   — ROUTES sabiti (tüm sayfa yolları)
+│
+├── styles/
+│   └── tokens.css                  — Tüm CSS değişkenleri (renkler, spacing vb.)
+│
+├── prisma/
+│   └── schema.prisma               — Tam veritabanı şeması
+│
+└── middleware.ts                   — Auth yönlendirme (dashboard + admin koruması)
+
+---
+
+## MARKA & TASARIM SİSTEMİ (Kesinlikle bu renkleri kullan)
+
+CSS Variable          Hex         Kullanım
+--color-primary       #00C4EB     Butonlar, linkler, vurgular, "ASI" logosu
+--color-primary-hover #00A3C4     Primary hover state
+--color-secondary     #1400A6     Rozetler, gradient arka planlar
+--color-background    #0A0A0C     Sayfa zemini
+--color-surface       #141419     Kartlar, paneller
+--color-surface-elevated #1A1A22  Yükseltilmiş kartlar
+--color-border        #27272A     Tüm border'lar
+--color-text-primary  #FFFFFF     Ana metinler
+--color-text-secondary #94A3B8    İkincil metinler
+--color-destructive   #EF4444     Hata, sil
+--color-success       #10B981     Başarı
+--font-sans           Inter       Tüm yazılar
+--radius-md           0.75rem     Kartlar, butonlar
+--sidebar-width       260px       Sol menü
+--topbar-height       64px        Üst bar
+
+Tailwind'de kullanım: bg-[var(--color-primary)], text-[var(--color-surface)] vb.
+
+---
+
+## VERİTABANI ŞEMASI (Prisma)
+
+users          → id, email, name, packageId, role (user|admin), createdAt
+packages       → id, name (student|clinic_pro|enterprise), dailyAiLimit, price
+modules        → id, name, description
+user_modules   → userId + moduleId (erişim tablosu)
+package_modules → packageId + moduleId
+patients       → id, userId, name, noteField, createdAt
+cases          → id, userId, patientId, title, description, createdAt
+sessions       → id, userId, caseId, model, tokensUsed, createdAt (AI kullanım logu)
+notes          → id, userId, patientId, content, createdAt
+pomodoro_logs  → id, userId, duration, completedAt
+
+---
+
+## AI SİSTEMİ
+
+Model Sabitleri (lib/ai/client.ts):
+  AI_MODELS.FAST      = claude-3-5-sonnet-20241022   → AI Tanı, Vaka RPG, Terminal
+  AI_MODELS.EFFICIENT = claude-3-5-haiku-20241022    → AI Asistan, Günlük Brifing
+
+AI Chat Endpoint: POST /api/ai/chat
+  Request body: { message: string, model: 'FAST'|'EFFICIENT', caseId?: string }
+  Response: { response: { type: 'text', text: string } }
+  Hata (limit): 429 → { error: 'AI limit exceeded' }
+
+Limit Sistemi:
+  student     → günde 10 AI isteği
+  clinic_pro  → sınırsız (-1)
+  enterprise  → sınırsız (-1) + öncelikli
+
+---
+
+## PAKET SİSTEMİ
+
+Paket         Günlük Limit   Fiyat
+student       10             Ücretsiz
+clinic_pro    Sınırsız       299₺/ay
+enterprise    Sınırsız       999₺/ay
+
+---
+
+## AUTH AKIŞI
+
+1. Kullanıcı /login → form action={login} server action çağrılır
+2. Supabase Auth ile giriş yapılır
+3. Başarılıysa /dashboard'a redirect
+4. middleware.ts: /dashboard ve /admin için auth kontrolü yapar
+5. Auth yoksa /login'e redirect
+
+Server Action'lar (lib/actions/auth.ts):
+  login(formData)    → Promise<void> (hata: throw new Error)
+  register(formData) → Promise<void>
+  logout()           → Promise<void>
+
+---
+
+## COMPONENT KULLANIM ÖRNEKLERİ
+
+// Button
+import { Button } from '@/components/ui'
+<Button variant="primary" size="md" loading={false}>Gönder</Button>
+
+// Input
+import { Input } from '@/components/ui'
+<Input label="E-Posta" name="email" type="email" error="Hatalı email" />
+
+// Card
+import { Card, CardTitle, CardContent } from '@/components/ui'
+<Card variant="bordered"><CardTitle>Başlık</CardTitle><CardContent>İçerik</CardContent></Card>
+
+// AI Chat (client component içinde)
+const res = await fetch('/api/ai/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ message: 'Soru', model: 'FAST' })
+})
+const data = await res.json() // data.response.text
+
+// Zustand Store
+import { useAuthStore, useUIStore } from '@/stores'
+const user = useAuthStore(s => s.user)
+const { sidebarOpen, toggleSidebar } = useUIStore()
+
+// Route Sabitleri
+import { ROUTES } from '@/constants'
+ROUTES.dashboard          → '/dashboard'
+ROUTES.modules.aiDiagnosis → '/dashboard/ai-diagnosis'
+ROUTES.admin.users        → '/admin/users'
+
+---
+
+## TAMAMLANAN SAYFALAR
+
+✅ app/page.tsx                    — Landing page (tam, animasyonlu)
+✅ app/(auth)/login/page.tsx       — Login formu
+✅ app/(auth)/register/page.tsx    — Register formu
+✅ app/(dashboard)/dashboard/page.tsx — Dashboard (istatistikler + hızlı erişim)
+✅ components/ui/                  — Button, Input, Card, Badge
+✅ components/layout/              — DashboardShell, Sidebar, Topbar
+✅ lib/actions/auth.ts             — Server Actions
+✅ lib/ai/                         — Claude client + limit sistemi
+✅ lib/email/                      — Resend email fonksiyonları
+✅ middleware.ts                   — Auth koruması
+✅ prisma/schema.prisma            — Tam şema + migrate edildi
+
+---
+
+## YAPILMAYI BEKLEYEN SAYFALAR (Boş iskelet var)
+
+⬜ app/(dashboard)/ai-diagnosis/page.tsx
+⬜ app/(dashboard)/case-rpg/page.tsx
+⬜ app/(dashboard)/terminal/page.tsx
+⬜ app/(dashboard)/ai-assistant/page.tsx
+⬜ app/(dashboard)/daily-briefing/page.tsx
+⬜ app/(dashboard)/patients/page.tsx
+⬜ app/(dashboard)/cases/page.tsx
+⬜ app/(dashboard)/notes/page.tsx
+⬜ app/(dashboard)/pomodoro/page.tsx
+⬜ app/admin/                      — Admin panel (kullanıcılar, paketler, modüller)
+⬜ app/upgrade/page.tsx            — Paket yükseltme sayfası
+
+---
+
+## ÖNEMLİ KURALLAR (Bozma, uyu)
+
+1. Renk: Asla hardcode renk yazma. Her zaman var(--color-xxx) veya bg-[var(--color-xxx)] kullan.
+2. Server/Client: Veri çeken sayfalar Server Component. Etkileşimli kısımlar 'use client'.
+3. Auth: Her korumalı route app/(dashboard)/ altında olmalı — layout.tsx zaten kontrol ediyor.
+4. AI: Her AI isteği önce /api/ai/chat endpoint'inden geçmeli. Direkt client'ta Anthropic çağırma.
+5. Import: UI bileşenlerini @/components/ui'den, layout'ları @/components/layout'tan import et.
+6. Tip: Tüm tipler @/types'tan import edilmeli. Yeni tip gerekirse types/domain.ts'e ekle.
+7. Form: Server Action kullanırken return tipi Promise<void> olmalı. Hata için throw new Error().
+8. Yorum: Koda yorum ekleme (sadece gerekirse).
+
+---
+
+## NASIL KULLANILIR
+
+Yapay zekaya şunu söyle:
+"Yukarıdaki context'i oku. [SORUNUN/İSTEĞİN]. Proje kurallarına ve mevcut yapıya uygun kod yaz."
+
+Örnek kullanımlar:
+- "AI Tanı modülü sayfasını yaz. Kullanıcı semptom girsin, FAST model ile analiz gelsin."
+- "Patients sayfasına hastalar CRUD tablosu ekle."
+- "Admin paneli kullanıcı listesi sayfasını yaz."
+- "Login sayfasında hata mesajı göster."
+- "Sidebar'a bildirim rozeti ekle."
+
+═══════════════════════════════════════════════════════════════
+Son güncelleme: Nisan 2026

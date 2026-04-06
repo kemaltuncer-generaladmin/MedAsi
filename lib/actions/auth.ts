@@ -5,22 +5,22 @@ import { createClient } from '@/lib/supabase/server'
 import { loginSchema, registerSchema } from '@/lib/schemas'
 import { ROUTES } from '@/constants'
 
-export async function login(formData: FormData) {
+export async function login(formData: FormData): Promise<void> {
   const raw = Object.fromEntries(formData)
   const parsed = loginSchema.safeParse(raw)
-  if (!parsed.success) return { error: parsed.error.errors[0].message }
+  if (!parsed.success) throw new Error(parsed.error.errors[0].message)
 
   const supabase = await createClient()
   const { error } = await supabase.auth.signInWithPassword(parsed.data)
-  if (error) return { error: error.message }
+  if (error) throw new Error(error.message)
 
   redirect(ROUTES.dashboard)
 }
 
-export async function register(formData: FormData) {
+export async function register(formData: FormData): Promise<void> {
   const raw = Object.fromEntries(formData)
   const parsed = registerSchema.safeParse(raw)
-  if (!parsed.success) return { error: parsed.error.errors[0].message }
+  if (!parsed.success) throw new Error(parsed.error.errors[0].message)
 
   const supabase = await createClient()
   const { error } = await supabase.auth.signUp({
@@ -28,12 +28,12 @@ export async function register(formData: FormData) {
     password: parsed.data.password,
     options: { data: { name: parsed.data.name } },
   })
-  if (error) return { error: error.message }
+  if (error) throw new Error(error.message)
 
   redirect(ROUTES.dashboard)
 }
 
-export async function logout() {
+export async function logout(): Promise<void> {
   const supabase = await createClient()
   await supabase.auth.signOut()
   redirect(ROUTES.login)
