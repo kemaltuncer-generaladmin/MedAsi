@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Medasi v1.0 — Kurulum Rehberi</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #0f0f0f;
+      color: #e4e4e4;
+      line-height: 1.7;
+    }
+
+    /* ── HEADER ── */
+    .header {
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+      padding: 60px 40px;
+      text-align: center;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    .header h1 {
+      font-size: 2.8rem;
+      font-weight: 800;
+      letter-spacing: -1px;
+      color: #fff;
+    }
+    .header h1 span { color: #6c8aff; }
+    .header p {
+      margin-top: 12px;
+      font-size: 1.1rem;
+      color: #8a8a9a;
+    }
+
+    /* ── TABS ── */
+    .tabs {
+      display: flex;
+      gap: 4px;
+      padding: 24px 40px 0;
+      background: #0f0f0f;
+      border-bottom: 1px solid #2a2a2a;
+      position: sticky;
+      top: 0;
+      z-index: 100;
+    }
+    .tab-btn {
+      padding: 10px 24px;
+      border-radius: 8px 8px 0 0;
+      border: none;
+      cursor: pointer;
+      font-size: 0.95rem;
+      font-weight: 600;
+      transition: all 0.2s;
+      background: #1a1a1a;
+      color: #666;
+    }
+    .tab-btn.active {
+      background: #1e1e2e;
+      color: #6c8aff;
+      border-bottom: 2px solid #6c8aff;
+    }
+    .tab-btn:hover:not(.active) { background: #222; color: #aaa; }
+
+    /* ── CONTENT ── */
+    .content { display: none; padding: 40px; max-width: 900px; margin: 0 auto; }
+    .content.active { display: block; }
+
+    /* ── STEP ── */
+    .step {
+      background: #1a1a1a;
+      border: 1px solid #2a2a2a;
+      border-radius: 16px;
+      padding: 28px 32px;
+      margin-bottom: 24px;
+      position: relative;
+    }
+    .step-number {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      font-weight: 800;
+      font-size: 0.9rem;
+      margin-bottom: 14px;
+    }
+    .step-number.blue  { background: #1e3a8a; color: #93c5fd; }
+    .step-number.green { background: #14532d; color: #86efac; }
+    .step-number.purple{ background: #3b0764; color: #d8b4fe; }
+    .step-number.orange{ background: #7c2d12; color: #fdba74; }
+    .step-number.red   { background: #7f1d1d; color: #fca5a5; }
+
+    .step h2 {
+      font-size: 1.25rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 10px;
+    }
+    .step p { color: #9a9aaa; margin-bottom: 12px; font-size: 0.97rem; }
+    .step p:last-child { margin-bottom: 0; }
+
+    /* ── CODE BLOCK ── */
+    .code-block {
+      background: #0d0d0d;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 16px 20px;
+      margin: 14px 0;
+      font-family: 'SF Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      color: #a0f0a0;
+      overflow-x: auto;
+      white-space: pre;
+      position: relative;
+    }
+    .copy-btn {
+      position: absolute;
+      top: 10px;
+      right: 12px;
+      background: #2a2a2a;
+      border: none;
+      color: #888;
+      padding: 4px 10px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .copy-btn:hover { background: #333; color: #ccc; }
+
+    /* ── FILE PATH ── */
+    .filepath {
+      display: inline-block;
+      background: #1e2030;
+      color: #7dd3fc;
+      font-family: monospace;
+      font-size: 0.82rem;
+      padding: 2px 8px;
+      border-radius: 5px;
+      border: 1px solid #2a3a50;
+      margin: 2px 0;
+    }
+
+    /* ── CALLOUT ── */
+    .callout {
+      border-radius: 10px;
+      padding: 14px 18px;
+      margin: 14px 0;
+      font-size: 0.92rem;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .callout.info    { background: #1e2a3a; border-left: 3px solid #6c8aff; color: #9ab0ff; }
+    .callout.warning { background: #2a1e0a; border-left: 3px solid #f59e0b; color: #fcd34d; }
+    .callout.success { background: #0a2a1e; border-left: 3px solid #10b981; color: #6ee7b7; }
+    .callout.danger  { background: #2a0a0a; border-left: 3px solid #ef4444; color: #fca5a5; }
+    .callout-icon { font-size: 1.1rem; flex-shrink: 0; margin-top: 1px; }
+
+    /* ── TABLE ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 14px 0;
+      font-size: 0.9rem;
+    }
+    th {
+      background: #1e1e2e;
+      color: #6c8aff;
+      padding: 10px 14px;
+      text-align: left;
+      font-weight: 600;
+      border-bottom: 1px solid #2a2a2a;
+    }
+    td {
+      padding: 10px 14px;
+      border-bottom: 1px solid #1e1e1e;
+      color: #c4c4d4;
+    }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #1a1a2a; }
+    td code {
+      background: #0d0d0d;
+      color: #a0f0a0;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.8rem;
+      font-family: monospace;
+    }
+
+    /* ── BADGE ── */
+    .badge {
+      display: inline-block;
+      padding: 2px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 600;
+    }
+    .badge.designer { background: #3b1d8a; color: #d8b4fe; }
+    .badge.dev      { background: #1d3a8a; color: #93c5fd; }
+
+    /* ── DIVIDER ── */
+    .divider {
+      border: none;
+      border-top: 1px solid #2a2a2a;
+      margin: 32px 0;
+    }
+
+    /* ── CHECKLIST ── */
+    .checklist { list-style: none; margin: 12px 0; }
+    .checklist li {
+      padding: 8px 0;
+      padding-left: 28px;
+      position: relative;
+      color: #9a9aaa;
+      font-size: 0.95rem;
+    }
+    .checklist li::before {
+      content: '☐';
+      position: absolute;
+      left: 0;
+      color: #444;
+      font-size: 1rem;
+    }
+
+    /* ── FLOW ── */
+    .flow {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0;
+      align-items: center;
+      margin: 16px 0;
+    }
+    .flow-item {
+      background: #1e1e2e;
+      border: 1px solid #2a2a3a;
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 0.85rem;
+      color: #c4c4d4;
+    }
+    .flow-arrow {
+      color: #444;
+      font-size: 1.2rem;
+      padding: 0 8px;
+    }
+
+    /* ── FOLDER TREE ── */
+    .tree {
+      background: #0d0d0d;
+      border: 1px solid #2a2a2a;
+      border-radius: 10px;
+      padding: 16px 20px;
+      font-family: monospace;
+      font-size: 0.83rem;
+      line-height: 1.8;
+      color: #888;
+    }
+    .tree .folder { color: #6c8aff; }
+    .tree .file   { color: #a0f0a0; }
+    .tree .desc   { color: #555; }
+
+    /* ── RESPONSIVE ── */
+    @media (max-width: 600px) {
+      .tabs { padding: 16px 16px 0; }
+      .tab-btn { padding: 8px 14px; font-size: 0.82rem; }
+      .content { padding: 20px 16px; }
+      .step { padding: 20px; }
+      .header { padding: 40px 20px; }
+      .header h1 { font-size: 1.8rem; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- HEADER -->
+<div class="header">
+  <h1>Medasi <span>v1.0</span></h1>
+  <p>Kurulum ve Entegrasyon Rehberi &nbsp;·&nbsp; Tasarımcı & Geliştirici</p>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="showTab('designer')">🎨 Tasarımcı</button>
+  <button class="tab-btn" onclick="showTab('dev')">⚙️ Geliştirici</button>
+  <button class="tab-btn" onclick="showTab('flow')">🔄 İş Akışı</button>
+  <button class="tab-btn" onclick="showTab('structure')">📁 Klasör Yapısı</button>
+</div>
+
+<!-- ───────────────────────────── TASARIMCI ───────────────────────────── -->
+<div id="tab-designer" class="content active">
+
+  <div class="callout info">
+    <span class="callout-icon">💡</span>
+    <span>Bu sekme tamamen <strong>tasarımcı</strong> için. Kod bilmene gerek yok. Figma'dan alıp nereye yapıştıracağını adım adım anlatıyor.</span>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="step-number purple">1</div>
+    <h2>Renkleri, Fontları ve Boyutları Aktar</h2>
+    <p>Figma'da tasarladığın her rengi, fontu ve köşe yuvarlaklığını tek bir dosyaya yazman gerekiyor. Bu dosya bütün projenin "renk paleti" gibi çalışıyor. Bir şeyi değiştirince her yer değişiyor.</p>
+    <p>Dosyanın yolu: <span class="filepath">styles/tokens.css</span></p>
+    <p>Aç, içindeki değerleri Figma'daki gerçek renklerinle değiştir. Şu an hepsi <code>#000000</code> yazıyor:</p>
+    <div class="code-block" id="code1">--color-primary: #6C8AFF;        /* ana buton rengi */
+--color-primary-hover: #5A78EF;  /* üstüne gelince */
+--color-secondary: #2A2A3A;      /* ikincil renk */
+--color-background: #0F0F0F;     /* sayfa arka planı */
+--color-surface: #1A1A1A;        /* kartların rengi */
+--color-text-primary: #FFFFFF;   /* ana yazı rengi */
+--color-text-secondary: #9A9AAA; /* soluk yazılar */
+--color-destructive: #EF4444;    /* hata/sil kırmızısı */
+--color-success: #10B981;        /* başarı yeşili */
+--font-sans: 'Inter';            /* Figma'daki fontu yaz */
+--radius-md: 0.5rem;             /* köşe yuvarlaklığı */
+<button class="copy-btn" onclick="copyCode('code1')">Kopyala</button></div>
+    <div class="callout warning">
+      <span class="callout-icon">⚠️</span>
+      <span>Sadece <code>#000000</code> yazan satırları değiştir. Yapının geri kalanına dokunma.</span>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="step-number purple">2</div>
+    <h2>Button, Input ve Card Bileşenlerini Güncelle</h2>
+    <p>Figma'dan gelen buton, input ve kart kodlarını şu dosyalara yapıştır. Her dosya seni bekliyor, içleri hazır — sadece görsel kısmı seninkiyle değiştir.</p>
+    <table>
+      <tr><th>Figma Bileşeni</th><th>Hangi Dosya</th></tr>
+      <tr><td>Button (Primary, Secondary, Ghost)</td><td><span class="filepath">components/ui/Button.tsx</span></td></tr>
+      <tr><td>Input / Text Field</td><td><span class="filepath">components/ui/Input.tsx</span></td></tr>
+      <tr><td>Card / Panel</td><td><span class="filepath">components/ui/Card.tsx</span></td></tr>
+      <tr><td>Badge / Etiket</td><td><span class="filepath">components/ui/Badge.tsx</span></td></tr>
+    </table>
+    <p>Yeni bir bileşen eklemen gerekirse <span class="filepath">components/ui/</span> klasörüne koy ve <span class="filepath">components/ui/index.ts</span> dosyasına şunu ekle:</p>
+    <div class="code-block" id="code2">export { YeniBilesenim } from './YeniBilesenim'
+<button class="copy-btn" onclick="copyCode('code2')">Kopyala</button></div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="step-number purple">3</div>
+    <h2>Sidebar ve Topbar Tasarımını Koy</h2>
+    <p>Sol menü ve üst bar için yer tutucu kodlar hazır. Figma'dan gelen tasarımı şu iki dosyaya yapıştır:</p>
+    <table>
+      <tr><th>Bileşen</th><th>Dosya</th></tr>
+      <tr><td>Sol Menü (Sidebar)</td><td><span class="filepath">components/layout/Sidebar.tsx</span></td></tr>
+      <tr><td>Üst Bar (Topbar)</td><td><span class="filepath">components/layout/Topbar.tsx</span></td></tr>
+    </table>
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <span>Sidebar genişliğini değiştirmek istersen <span class="filepath">styles/tokens.css</span> içindeki <code>--sidebar-width: 260px</code> satırını değiştirmen yeterli. Kod değiştirmene gerek yok.</span>
+    </div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="step-number purple">4</div>
+    <h2>Sayfa Tasarımlarını Yerleştir</h2>
+    <p>Bu dosyalar tamamen boş ve seni bekliyor. Figma'dan gelen sayfa kodlarını bunların içine yapıştır:</p>
+    <table>
+      <tr><th>Sayfa</th><th>Dosya</th></tr>
+      <tr><td>Giriş Sayfası</td><td><span class="filepath">app/(auth)/login/page.tsx</span></td></tr>
+      <tr><td>Kayıt Sayfası</td><td><span class="filepath">app/(auth)/register/page.tsx</span></td></tr>
+      <tr><td>Ana Dashboard</td><td><span class="filepath">app/(dashboard)/dashboard/page.tsx</span></td></tr>
+    </table>
+    <p>Login formunu bağlamak için sadece şunu yap — formun <code>action</code>'ına ekle:</p>
+    <div class="code-block" id="code3">import { login } from '@/lib/actions/auth'
+
+&lt;form action={login}&gt;
+  &lt;input name="email" type="email" /&gt;
+  &lt;input name="password" type="password" /&gt;
+  &lt;button type="submit"&gt;Giriş Yap&lt;/button&gt;
+&lt;/form&gt;
+<button class="copy-btn" onclick="copyCode('code3')">Kopyala</button></div>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="step-number purple">5</div>
+    <h2>AI Modül Sayfaları</h2>
+    <p>Her modül için bir sayfa açman gerekiyor. Klasörleri şu şekilde oluştur ve içlerine Figma'dan gelen kodu koy:</p>
+    <table>
+      <tr><th>Modül</th><th>Klasör</th><th>AI Hızı</th></tr>
+      <tr><td>AI Tanı</td><td><span class="filepath">app/(dashboard)/ai-diagnosis/page.tsx</span></td><td>Sonnet (Hızlı)</td></tr>
+      <tr><td>Vaka RPG</td><td><span class="filepath">app/(dashboard)/case-rpg/page.tsx</span></td><td>Sonnet (Hızlı)</td></tr>
+      <tr><td>Terminal</td><td><span class="filepath">app/(dashboard)/terminal/page.tsx</span></td><td>Sonnet (Hızlı)</td></tr>
+      <tr><td>AI Asistan</td><td><span class="filepath">app/(dashboard)/ai-assistant/page.tsx</span></td><td>Haiku (Ucuz)</td></tr>
+      <tr><td>Günlük Brifing</td><td><span class="filepath">app/(dashboard)/daily-briefing/page.tsx</span></td><td>Haiku (Ucuz)</td></tr>
+    </table>
+    <p>AI'ya mesaj göndermek için sayfada şunu kullan:</p>
+    <div class="code-block" id="code4">const res = await fetch('/api/ai/chat', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({
+    message: 'Kullanıcının yazdığı mesaj',
+    model: 'FAST',   // AI Tanı, RPG, Terminal için
+    // model: 'EFFICIENT'  // Asistan, Brifing için
+  })
+})
+const data = await res.json()
+console.log(data.response.text)
+<button class="copy-btn" onclick="copyCode('code4')">Kopyala</button></div>
+  </div>
+
+</div>
+
+<!-- ───────────────────────────── GELİŞTİRİCİ ───────────────────────────── -->
+<div id="tab-dev" class="content">
+
+  <div class="callout info">
+    <span class="callout-icon">💡</span>
+    <span>Bu sekme tamamen <strong>sana</strong> (geliştirici). Tasarımcı bir şey göndermeden önce bu adımları tamamla.</span>
+  </div>
+
+  <!-- STEP 1 -->
+  <div class="step">
+    <div class="step-number blue">1</div>
+    <h2>.env Dosyasını Oluştur</h2>
+    <p>Proje klasöründe terminali aç ve şu komutu çalıştır. Bu, örnek dosyayı gerçek dosyaya kopyalar:</p>
+    <div class="code-block" id="dev1">cp .env.example .env.local
+<button class="copy-btn" onclick="copyCode('dev1')">Kopyala</button></div>
+    <p>Sonra <span class="filepath">.env.local</span> dosyasını aç ve aşağıdaki key'leri doldur. Her birini nereden alacağın tabloda:</p>
+    <table>
+      <tr><th>Değişken</th><th>Nereden Alınır</th></tr>
+      <tr><td><code>NEXT_PUBLIC_SUPABASE_URL</code></td><td>Supabase → Projen → Settings → API</td></tr>
+      <tr><td><code>NEXT_PUBLIC_SUPABASE_ANON_KEY</code></td><td>Supabase → Projen → Settings → API</td></tr>
+      <tr><td><code>SUPABASE_SERVICE_ROLE_KEY</code></td><td>Supabase → Projen → Settings → API</td></tr>
+      <tr><td><code>DATABASE_URL</code></td><td>Supabase → Settings → Database → Connection String → Prisma</td></tr>
+      <tr><td><code>ANTHROPIC_API_KEY</code></td><td>console.anthropic.com → API Keys</td></tr>
+      <tr><td><code>RESEND_API_KEY</code></td><td>resend.com → API Keys</td></tr>
+      <tr><td><code>ADMIN_EMAIL</code></td><td>Kendi email adresin</td></tr>
+    </table>
+    <div class="callout danger">
+      <span class="callout-icon">🚫</span>
+      <span><strong>.env.local dosyasını asla GitHub'a atma.</strong> .gitignore zaten engelliyor ama yine de dikkatli ol.</span>
+    </div>
+  </div>
+
+  <!-- STEP 2 -->
+  <div class="step">
+    <div class="step-number blue">2</div>
+    <h2>Veritabanını Oluştur</h2>
+    <p>Bu komut Prisma şemasını okuyup Supabase'de bütün tabloları oluşturur. Tek seferlik çalıştır:</p>
+    <div class="code-block" id="dev2">npx prisma migrate dev --name init
+<button class="copy-btn" onclick="copyCode('dev2')">Kopyala</button></div>
+    <p>Tablolar oluştuktan sonra Supabase SQL Editor'ı aç ve paket verilerini ekle:</p>
+    <div class="code-block" id="dev3">INSERT INTO packages (id, name, daily_ai_limit, price) VALUES
+  (gen_random_uuid(), 'student',    10, 0),
+  (gen_random_uuid(), 'clinic_pro', -1, 299),
+  (gen_random_uuid(), 'enterprise', -1, 999);
+<button class="copy-btn" onclick="copyCode('dev3')">Kopyala</button></div>
+    <div class="callout info">
+      <span class="callout-icon">💡</span>
+      <span><code>-1</code> sınırsız demek. Öğrenci günde 10, Pro ve Kurumsal sınırsız.</span>
+    </div>
+  </div>
+
+  <!-- STEP 3 -->
+  <div class="step">
+    <div class="step-number blue">3</div>
+    <h2>Güvenlik Kurallarını Yaz (RLS)</h2>
+    <p>Bu kurallar sayesinde hiç kimse başkasının hastasını, vakasını veya notunu göremez. Supabase SQL Editor'da çalıştır:</p>
+    <div class="code-block" id="dev4">-- Güvenliği aç
+ALTER TABLE patients     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE cases        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE notes        ENABLE ROW LEVEL SECURITY;
+ALTER TABLE sessions     ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pomodoro_logs ENABLE ROW LEVEL SECURITY;
+
+-- "Sadece kendin görebilirsin" kuralları
+CREATE POLICY "users_own_patients"  ON patients     FOR ALL USING (user_id = auth.uid()::text);
+CREATE POLICY "users_own_cases"     ON cases        FOR ALL USING (user_id = auth.uid()::text);
+CREATE POLICY "users_own_notes"     ON notes        FOR ALL USING (user_id = auth.uid()::text);
+CREATE POLICY "users_own_sessions"  ON sessions     FOR ALL USING (user_id = auth.uid()::text);
+CREATE POLICY "users_own_pomodoro"  ON pomodoro_logs FOR ALL USING (user_id = auth.uid()::text);
+<button class="copy-btn" onclick="copyCode('dev4')">Kopyala</button></div>
+  </div>
+
+  <!-- STEP 4 -->
+  <div class="step">
+    <div class="step-number blue">4</div>
+    <h2>Kendine Admin Yetkisi Ver</h2>
+    <p>Önce uygulamaya normal kullanıcı olarak kayıt ol. Sonra Supabase SQL Editor'da şunu çalıştır — email adresini değiştir:</p>
+    <div class="code-block" id="dev5">UPDATE users SET role = 'admin' WHERE email = 'senin@emailin.com';
+<button class="copy-btn" onclick="copyCode('dev5')">Kopyala</button></div>
+    <p>Artık <span class="filepath">/admin</span> sayfasına erişebilirsin. Normal kullanıcılar giremez.</p>
+  </div>
+
+  <!-- STEP 5 -->
+  <div class="step">
+    <div class="step-number blue">5</div>
+    <h2>Middleware'i Tamamla</h2>
+    <p>Şu an <span class="filepath">middleware.ts</span> iskelet hâlinde. Gerçek auth kontrolünü ekle. Dosyanın tüm içeriğini şununla değiştir:</p>
+    <div class="code-block" id="dev6">import { createServerClient } from '@supabase/ssr'
+import { NextResponse, type NextRequest } from 'next/server'
+
+export async function middleware(request: NextRequest) {
+  const { pathname } = request.nextUrl
+  const response = NextResponse.next()
+
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        get: (n) => request.cookies.get(n)?.value,
+        set: () => {},
+        remove: () => {},
+      }
+    }
+  )
+
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user && pathname.startsWith('/dashboard')) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  if (!user && pathname.startsWith('/admin')) {
+    return NextResponse.redirect(new URL('/login', request.url))
+  }
+
+  return response
+}
+
+export const config = {
+  matcher: ['/dashboard/:path*', '/admin/:path*']
+}
+<button class="copy-btn" onclick="copyCode('dev6')">Kopyala</button></div>
+  </div>
+
+  <!-- STEP 6 -->
+  <div class="step">
+    <div class="step-number blue">6</div>
+    <h2>Vercel'e Yükle</h2>
+    <p>Terminalde şunu çalıştır:</p>
+    <div class="code-block" id="dev7">npx vercel
+<button class="copy-btn" onclick="copyCode('dev7')">Kopyala</button></div>
+    <p>Sonra Vercel dashboard'a git → Projen → Settings → Environment Variables. <span class="filepath">.env.local</span> içindeki her satırı buraya tek tek ekle.</p>
+    <div class="callout success">
+      <span class="callout-icon">✅</span>
+      <span><code>postinstall</code> scripti zaten ayarlı. Her deploy'da Prisma otomatik generate oluyor. Başka bir şey yapmanı gerekmiyor.</span>
+    </div>
+  </div>
+
+</div>
+
+<!-- ───────────────────────────── İŞ AKIŞI ───────────────────────────── -->
+<div id="tab-flow" class="content">
+
+  <div class="step">
+    <div class="step-number green">→</div>
+    <h2>Kim Ne Yapıyor?</h2>
+    <p>İkisi aynı anda çalışabilir. Birbirini beklemek zorunda değiller.</p>
+
+    <table>
+      <tr>
+        <th>Görev</th>
+        <th>Kim Yapıyor</th>
+        <th>Nereye</th>
+      </tr>
+      <tr>
+        <td>Renkleri ve fontları gir</td>
+        <td><span class="badge designer">Tasarımcı</span></td>
+        <td><span class="filepath">styles/tokens.css</span></td>
+      </tr>
+      <tr>
+        <td>Button, Input, Card kodları</td>
+        <td><span class="badge designer">Tasarımcı</span></td>
+        <td><span class="filepath">components/ui/</span></td>
+      </tr>
+      <tr>
+        <td>Sidebar ve Topbar</td>
+        <td><span class="badge designer">Tasarımcı</span></td>
+        <td><span class="filepath">components/layout/</span></td>
+      </tr>
+      <tr>
+        <td>Login, Register, Dashboard sayfaları</td>
+        <td><span class="badge designer">Tasarımcı</span></td>
+        <td><span class="filepath">app/(auth)/ &amp; app/(dashboard)/</span></td>
+      </tr>
+      <tr>
+        <td>.env doldur</td>
+        <td><span class="badge dev">Sen</span></td>
+        <td><span class="filepath">.env.local</span></td>
+      </tr>
+      <tr>
+        <td>Veritabanını kur</td>
+        <td><span class="badge dev">Sen</span></td>
+        <td>Terminal + Supabase SQL</td>
+      </tr>
+      <tr>
+        <td>RLS kuralları</td>
+        <td><span class="badge dev">Sen</span></td>
+        <td>Supabase SQL Editor</td>
+      </tr>
+      <tr>
+        <td>Admin yetkisi ver</td>
+        <td><span class="badge dev">Sen</span></td>
+        <td>Supabase SQL Editor</td>
+      </tr>
+      <tr>
+        <td>Middleware tamamla</td>
+        <td><span class="badge dev">Sen</span></td>
+        <td><span class="filepath">middleware.ts</span></td>
+      </tr>
+      <tr>
+        <td>Vercel deploy</td>
+        <td><span class="badge dev">Sen</span></td>
+        <td>Terminal + Vercel Dashboard</td>
+      </tr>
+    </table>
+  </div>
+
+  <div class="step">
+    <div class="step-number green">→</div>
+    <h2>Bir Kullanıcı Uygulamaya Girince Ne Olur?</h2>
+    <div class="flow">
+      <div class="flow-item">Kullanıcı giriş yapar</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">Supabase token verir</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">Dashboard'a yönlenir</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">AI modülüne tıklar</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">Limit kontrolü yapılır</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">Claude API çağrılır</div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-item">Cevap gelir</div>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number green">→</div>
+    <h2>AI Limit Nasıl Çalışıyor?</h2>
+    <table>
+      <tr><th>Paket</th><th>Günlük Limit</th><th>Fiyat</th></tr>
+      <tr><td>Öğrenci</td><td>10 istek</td><td>Ücretsiz</td></tr>
+      <tr><td>Klinik Pro</td><td>Sınırsız</td><td>299₺/ay</td></tr>
+      <tr><td>Kurumsal</td><td>Sınırsız + Öncelikli</td><td>999₺/ay</td></tr>
+    </table>
+    <p>Öğrenci paketi günlük 10 isteği doldurunca API <code>429</code> döner ve kullanıcıya "Limitiniz doldu" mesajı gösterilir.</p>
+  </div>
+
+</div>
+
+<!-- ───────────────────────────── KLASÖR YAPISI ───────────────────────────── -->
+<div id="tab-structure" class="content">
+
+  <div class="step">
+    <div class="step-number orange">📁</div>
+    <h2>Tam Klasör Yapısı</h2>
+    <p>Her satırdaki yorum kimin sorumluluğunda olduğunu gösteriyor.</p>
+    <div class="tree">
+<span class="folder">Medasi v1.0/</span>
+│
+├── <span class="folder">styles/</span>
+│   └── <span class="file">tokens.css</span>         <span class="desc">← 🎨 Tasarımcı: renkler, fontlar, boyutlar</span>
+│
+├── <span class="folder">types/</span>
+│   ├── <span class="file">domain.ts</span>           <span class="desc">← hazır, dokunma (User, Patient, Case...)</span>
+│   └── <span class="file">api.ts</span>              <span class="desc">← hazır, dokunma</span>
+│
+├── <span class="folder">constants/</span>
+│   ├── <span class="file">modules.ts</span>          <span class="desc">← 47 modül listesi</span>
+│   ├── <span class="file">packages.ts</span>         <span class="desc">← 3 paket tanımı</span>
+│   ├── <span class="file">ai.ts</span>               <span class="desc">← hangi modül hangi AI modelini kullanır</span>
+│   └── <span class="file">routes.ts</span>           <span class="desc">← tüm sayfa adresleri</span>
+│
+├── <span class="folder">stores/</span>
+│   ├── <span class="file">auth.ts</span>             <span class="desc">← giriş yapan kullanıcı bilgisi</span>
+│   └── <span class="file">ui.ts</span>               <span class="desc">← sidebar açık/kapalı durumu</span>
+│
+├── <span class="folder">lib/</span>
+│   ├── <span class="file">prisma.ts</span>           <span class="desc">← veritabanı bağlantısı</span>
+│   ├── <span class="folder">supabase/</span>
+│   │   ├── <span class="file">server.ts</span>       <span class="desc">← sunucu tarafı auth</span>
+│   │   └── <span class="file">client.ts</span>       <span class="desc">← tarayıcı tarafı auth</span>
+│   ├── <span class="folder">ai/</span>
+│   │   ├── <span class="file">client.ts</span>       <span class="desc">← Claude API bağlantısı</span>
+│   │   └── <span class="file">check-limit.ts</span>  <span class="desc">← günlük limit kontrolü</span>
+│   ├── <span class="folder">actions/</span>
+│   │   └── <span class="file">auth.ts</span>         <span class="desc">← login, register, logout fonksiyonları</span>
+│   └── <span class="folder">schemas/</span>
+│       ├── <span class="file">auth.ts</span>         <span class="desc">← form doğrulama kuralları</span>
+│       └── <span class="file">domain.ts</span>       <span class="desc">← hasta/vaka/not doğrulama</span>
+│
+├── <span class="folder">components/</span>
+│   ├── <span class="folder">ui/</span>              <span class="desc">← 🎨 Tasarımcı buraya bileşenleri koyar</span>
+│   │   ├── <span class="file">Button.tsx</span>
+│   │   ├── <span class="file">Input.tsx</span>
+│   │   ├── <span class="file">Card.tsx</span>
+│   │   └── <span class="file">Badge.tsx</span>
+│   └── <span class="folder">layout/</span>          <span class="desc">← 🎨 Tasarımcı sidebar/topbar'ı buraya koyar</span>
+│       ├── <span class="file">DashboardShell.tsx</span>
+│       ├── <span class="file">Sidebar.tsx</span>
+│       └── <span class="file">Topbar.tsx</span>
+│
+├── <span class="folder">app/</span>
+│   ├── <span class="folder">(auth)/</span>          <span class="desc">← URL'de görünmez, sadece gruplama</span>
+│   │   ├── <span class="file">layout.tsx</span>      <span class="desc">← login/register arka planı</span>
+│   │   ├── <span class="folder">login/</span>
+│   │   │   └── <span class="file">page.tsx</span>    <span class="desc">← 🎨 Tasarımcı login formunu buraya koyar</span>
+│   │   └── <span class="folder">register/</span>
+│   │       └── <span class="file">page.tsx</span>    <span class="desc">← 🎨 Tasarımcı register formunu buraya koyar</span>
+│   ├── <span class="folder">(dashboard)/</span>     <span class="desc">← Giriş yapmayanlar buraya giremez</span>
+│   │   ├── <span class="file">layout.tsx</span>      <span class="desc">← auth kontrolü burada, dokunma</span>
+│   │   ├── <span class="folder">dashboard/</span>
+│   │   │   └── <span class="file">page.tsx</span>    <span class="desc">← 🎨 Ana dashboard sayfası</span>
+│   │   ├── <span class="folder">ai-diagnosis/</span>
+│   │   │   └── <span class="file">page.tsx</span>    <span class="desc">← 🎨 AI Tanı modülü</span>
+│   │   └── <span class="desc">... diğer modüller aynı şekilde</span>
+│   └── <span class="folder">api/</span>             <span class="desc">← ⚙️ Sen: backend endpoint'leri</span>
+│       ├── <span class="folder">patients/route.ts</span>
+│       ├── <span class="folder">cases/route.ts</span>
+│       ├── <span class="folder">ai/chat/route.ts</span>
+│       └── <span class="folder">admin/users/route.ts</span>
+│
+├── <span class="file">middleware.ts</span>           <span class="desc">← ⚙️ Sen: auth yönlendirmesi</span>
+├── <span class="file">prisma/schema.prisma</span>    <span class="desc">← veritabanı şeması, hazır</span>
+└── <span class="file">.env.local</span>             <span class="desc">← ⚙️ Sen: API key'leri buraya</span>
+    </div>
+  </div>
+
+  <div class="step">
+    <div class="step-number orange">✅</div>
+    <h2>Kontrol Listesi</h2>
+    <p>Her şey tamam mı? Tick at:</p>
+    <ul class="checklist">
+      <li>.env.local oluşturuldu ve dolduruldu</li>
+      <li>npx prisma migrate dev çalıştırıldı</li>
+      <li>Paketler SQL ile eklendi (student, clinic_pro, enterprise)</li>
+      <li>RLS politikaları uygulandı</li>
+      <li>Admin email'i güncellendi</li>
+      <li>middleware.ts tamamlandı</li>
+      <li>styles/tokens.css Figma renkleriyle güncellendi</li>
+      <li>components/ui/ bileşenleri Figma'dan güncellendi</li>
+      <li>Sidebar ve Topbar Figma tasarımıyla değiştirildi</li>
+      <li>Login ve Register sayfaları eklendi</li>
+      <li>Dashboard sayfası eklendi</li>
+      <li>Vercel'e deploy edildi ve env variables eklendi</li>
+    </ul>
+  </div>
+
+</div>
+
+<script>
+  function showTab(name) {
+    document.querySelectorAll('.content').forEach(el => el.classList.remove('active'))
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'))
+    document.getElementById('tab-' + name).classList.add('active')
+    event.target.classList.add('active')
+  }
+
+  function copyCode(id) {
+    const el = document.getElementById(id)
+    const btn = el.querySelector('.copy-btn')
+    const text = el.innerText.replace('Kopyala', '').trim()
+    navigator.clipboard.writeText(text).then(() => {
+      btn.textContent = 'Kopyalandı!'
+      setTimeout(() => btn.textContent = 'Kopyala', 2000)
+    })
+  }
+</script>
+
+</body>
+</html>
