@@ -9,14 +9,14 @@ interface CardProps {
 }
 
 const variantClass: Record<Variant, string> = {
-  default: 'bg-surface',
-  elevated: 'bg-surface-elevated shadow-md',
-  bordered: 'bg-surface border border-border',
+  default: 'bg-[var(--color-surface)]',
+  elevated: 'bg-[var(--color-surface-elevated)] shadow-md',
+  bordered: 'bg-[var(--color-surface)] border border-[var(--color-border)]',
 }
 
 export function Card({ children, variant = 'default', className = '' }: CardProps) {
   return (
-    <div className={['rounded-xl p-6', variantClass[variant], className].join(' ')}>
+    <div className={['rounded-lg p-6', variantClass[variant], className].join(' ')}>
       {children}
     </div>
   )
@@ -27,9 +27,9 @@ export function CardHeader({ children, className = '' }: { children: ReactNode; 
 }
 
 export function CardTitle({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <h3 className={['text-lg font-semibold text-text-primary', className].join(' ')}>{children}</h3>
+  return <h3 className={['text-lg font-semibold text-[var(--color-text-primary)]', className].join(' ')}>{children}</h3>
 }
 
 export function CardContent({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={['text-text-secondary', className].join(' ')}>{children}</div>
+  return <div className={['text-[var(--color-text-secondary)]', className].join(' ')}>{children}</div>
 }

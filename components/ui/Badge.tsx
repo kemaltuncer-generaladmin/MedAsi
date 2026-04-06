@@ -7,11 +7,11 @@ interface BadgeProps {
 }
 
 const variantClass = {
-  default: 'bg-primary text-text-inverse',
-  success: 'bg-success text-text-inverse',
-  warning: 'bg-warning text-text-primary',
-  destructive: 'bg-destructive text-text-inverse',
-  secondary: 'bg-surface-elevated text-text-secondary border border-border',
+  default: 'bg-[var(--color-primary)] text-black',
+  success: 'bg-[var(--color-success)] text-white',
+  warning: 'bg-[var(--color-warning)] text-black',
+  destructive: 'bg-[var(--color-destructive)] text-white',
+  secondary: 'bg-[var(--color-surface-elevated)] text-[var(--color-text-secondary)] border border-[var(--color-border)]',
 }
 
 export function Badge({ children, variant = 'default', className = '' }: BadgeProps) {

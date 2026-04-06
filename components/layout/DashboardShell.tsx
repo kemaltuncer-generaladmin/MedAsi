@@ -10,18 +10,16 @@ interface DashboardShellProps {
 
 export function DashboardShell({ sidebar, topbar, children }: DashboardShellProps) {
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
-      <aside className="w-sidebar shrink-0 h-full overflow-y-auto border-r border-border">
-        {sidebar}
-      </aside>
+    <div className="flex h-screen bg-[var(--color-background)] overflow-hidden">
+      {sidebar}
 
-      <div className="flex flex-col flex-1 min-w-0 overflow-hidden">
-        <header className="h-topbar shrink-0 border-b border-border flex items-center">
-          {topbar}
-        </header>
+      <div className="flex flex-col flex-1 min-w-0 overflow-hidden" style={{ marginLeft: 'var(--sidebar-width)' }}>
+        {topbar}
 
-        <main className="flex-1 overflow-y-auto p-6">
-          {children}
+        <main className="flex-1 overflow-y-auto" style={{ marginTop: 'var(--topbar-height)' }}>
+          <div className="p-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>
