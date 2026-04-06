@@ -1,0 +1,139 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id         String   @id @default(uuid())
+  email      String   @unique
+  name       String?
+  packageId  String   @map("package_id")
+  role       String   @default("user")
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  package       Package        @relation(fields: [packageId], references: [id])
+  userModules   UserModule[]
+  patients      Patient[]
+  cases         Case[]
+  sessions      Session[]
+  notes         Note[]
+  pomodoroLogs  PomodoroLog[]
+  
+  @@map("users")
+}
+
+model Package {
+  id           String @id @default(uuid())
+  name         String @unique
+  dailyAiLimit Int    @map("daily_ai_limit")
+  price        Float
+  
+  users       User[]
+  modules     PackageModule[]
+  
+  @@map("packages")
+}
+
+model Module {
+  id          String @id @default(uuid())
+  name        String @unique
+  description String?
+  
+  userModules    UserModule[]
+  packageModules PackageModule[]
+  
+  @@map("modules")
+}
+
+model UserModule {
+  userId   String @map("user_id")
+  moduleId String @map("module_id")
+  
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  
+  @@id([userId, moduleId])
+  @@map("user_modules")
+}
+
+model PackageModule {
+  packageId String @map("package_id")
+  moduleId  String @map("module_id")
+  
+  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  module  Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  
+  @@id([packageId, moduleId])
+  @@map("package_modules")
+}
+
+model Patient {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  name       String
+  noteField  String?  @map("notes")
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  cases      Case[]
+  patientNotes Note[] @relation("PatientNotes")
+  
+  @@map("patients")
+}
+
+model Case {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  patientId   String?  @map("patient_id")
+  title       String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+  
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patient  Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  sessions Session[]
+  
+  @@map("cases")
+}
+
+model Session {
+  id         String   @id @default(uuid())
+  userId     String   @map("user_id")
+  caseId     String?  @map("case_id")
+  model      String
+  tokensUsed Int      @map("tokens_used")
+  createdAt  DateTime @default(now()) @map("created_at")
+  
+  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
+  
+  @@map("sessions")
+}
+
+model Note {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  patientId String?  @map("patient_id")
+  content   String
+  createdAt DateTime @default(now()) @map("created_at")
+  
+  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  patient Patient? @relation("PatientNotes", fields: [patientId], references: [id], onDelete: SetNull)
+  
+  @@map("notes")
+}
+
+model PomodoroLog {
+  id          String   @id @default(uuid())
+  userId      String   @map("user_id")
+  duration    Int
+  completedAt DateTime @default(now()) @map("completed_at")
+  
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@map("pomodoro_logs")
+}

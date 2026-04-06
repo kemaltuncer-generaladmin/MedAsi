@@ -1,0 +1,25 @@
+export const ROUTES = {
+  home: '/',
+  login: '/login',
+  register: '/register',
+  dashboard: '/dashboard',
+  patients: '/dashboard/patients',
+  cases: '/dashboard/cases',
+  notes: '/dashboard/notes',
+  pomodoro: '/dashboard/pomodoro',
+  modules: {
+    aiDiagnosis: '/dashboard/ai-diagnosis',
+    caseRpg: '/dashboard/case-rpg',
+    terminal: '/dashboard/terminal',
+    aiAssistant: '/dashboard/ai-assistant',
+    dailyBriefing: '/dashboard/daily-briefing',
+  },
+  admin: {
+    root: '/admin',
+    users: '/admin/users',
+    packages: '/admin/packages',
+    modules: '/admin/modules',
+    analytics: '/admin/analytics',
+  },
+  upgrade: '/upgrade',
+} as const
