@@ -314,13 +314,6 @@ export default async function AdminPage() {
                   key={user.id}
                   className="transition-colors duration-100"
                   style={{ borderBottom: '1px solid var(--color-border)' }}
-                  onMouseEnter={(e) => {
-                    ;(e.currentTarget as HTMLTableRowElement).style.backgroundColor =
-                      'var(--color-surface)'
-                  }}
-                  onMouseLeave={(e) => {
-                    ;(e.currentTarget as HTMLTableRowElement).style.backgroundColor = 'transparent'
-                  }}
                 >
                   <td className="px-6 py-3">
                     <div className="flex items-center gap-3">
@@ -423,12 +416,6 @@ export default async function AdminPage() {
               style={{
                 backgroundColor: 'var(--color-surface-elevated)',
                 border: '1px solid var(--color-border)',
-              }}
-              onMouseEnter={(e) => {
-                ;(e.currentTarget as HTMLAnchorElement).style.borderColor = action.accentColor
-              }}
-              onMouseLeave={(e) => {
-                ;(e.currentTarget as HTMLAnchorElement).style.borderColor = 'var(--color-border)'
               }}
             >
               <div
