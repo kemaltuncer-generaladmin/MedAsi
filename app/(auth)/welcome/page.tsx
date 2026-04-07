@@ -59,7 +59,7 @@ function LoginForm() {
         </div>
       )}
 
-      <form id={id} action={(fd) => { setError(null); startTransition(async () => { try { await login(fd) } catch (e) { if (isRedirectError(e)) throw e; setError(e instanceof Error ? e.message : 'Hata oluştu') } }) }} className="space-y-4">
+      <form id={id} action={(fd) => { setError(null); startTransition(async () => { try { const r = await login(fd); if (r && !r.success) setError(r.error || 'Hata oluştu') } catch (e) { if (isRedirectError(e)) throw e; setError(e instanceof Error ? e.message : 'Hata oluştu') } }) }} className="space-y-4">
         <div>
           <label className="block text-xs uppercase tracking-widest text-[var(--color-text-secondary)] mb-1.5 font-mono">E-posta</label>
           <div className="relative">
@@ -113,7 +113,7 @@ function RegisterForm({ onSuccess }: { onSuccess: () => void }) {
         setError(null)
         if (String(fd.get('password')) !== String(fd.get('confirmPassword'))) { setError('Şifreler eşleşmiyor'); return }
         fd.delete('confirmPassword')
-        startTransition(async () => { try { await register(fd); onSuccess() } catch (e) { if (isRedirectError(e)) throw e; setError(e instanceof Error ? e.message : 'Hata oluştu') } })
+        startTransition(async () => { try { const r = await register(fd); if (r && !r.success) { setError(r.error || 'Hata oluştu') } else { onSuccess() } } catch (e) { if (isRedirectError(e)) throw e; setError(e instanceof Error ? e.message : 'Hata oluştu') } })
       }} className="space-y-3">
         <div>
           <label className="block text-xs uppercase tracking-widest text-[var(--color-text-secondary)] mb-1.5 font-mono">Ad Soyad</label>

@@ -18,7 +18,10 @@ export default function LoginPage() {
     setError(null)
     startTransition(async () => {
       try {
-        await login(formData)
+        const result = await login(formData)
+        if (result && !result.success) {
+          setError(result.error || 'Bir hata oluştu')
+        }
       } catch (submitError) {
         if (isRedirectError(submitError)) throw submitError
         setError(submitError instanceof Error ? submitError.message : 'Bir hata oluştu')

@@ -35,7 +35,10 @@ export default function RegisterPage() {
 
     startTransition(async () => {
       try {
-        await register(formData)
+        const result = await register(formData)
+        if (result && !result.success) {
+          setError(result.error || 'Bir hata oluştu')
+        }
       } catch (submitError) {
         if (isRedirectError(submitError)) throw submitError
         setError(submitError instanceof Error ? submitError.message : 'Bir hata oluştu')
