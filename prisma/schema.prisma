@@ -9,51 +9,48 @@ datasource db {
 }
 
 model User {
-  id         String   @id @default(uuid())
-  email      String   @unique
-  name       String?
-  packageId  String   @map("package_id")
-  role       String   @default("user")
-  createdAt            DateTime @default(now()) @map("created_at")
-  onboardingCompleted  Boolean  @default(false) @map("onboarding_completed")
-  goals                Json?
-  interests            Json?
-  notificationPrefs    Json?    @map("notification_prefs")
-
-  package          Package               @relation(fields: [packageId], references: [id])
-  userModules      UserModule[]
-  patients         Patient[]
-  cases            Case[]
-  sessions         Session[]
-  notes            Note[]
-  pomodoroLogs     PomodoroLog[]
-  orgAdmin         ResearchOrganization[] @relation("OrgAdmin")
-  orgMemberships   OrgMember[]
-  orgAiUsage       OrgAiUsage[]
+  id                  String                 @id @default(uuid())
+  email               String                 @unique
+  name                String?
+  packageId           String                 @map("package_id")
+  role                String                 @default("user")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  goals               Json?
+  interests           Json?
+  notificationPrefs   Json?                  @map("notification_prefs")
+  onboardingCompleted Boolean                @default(false) @map("onboarding_completed")
+  cases               Case[]
+  notes               Note[]
+  orgAiUsage          OrgAiUsage[]
+  orgMemberships      OrgMember[]
+  patients            Patient[]
+  pomodoroLogs        PomodoroLog[]
+  orgAdmin            ResearchOrganization[] @relation("OrgAdmin")
+  sessions            Session[]
+  userModules         UserModule[]
+  package             Package                @relation(fields: [packageId], references: [id])
 
   @@map("users")
 }
 
 model Package {
-  id           String @id @default(uuid())
-  name         String @unique
-  dailyAiLimit Int    @map("daily_ai_limit")
+  id           String          @id @default(uuid())
+  name         String          @unique
+  dailyAiLimit Int             @map("daily_ai_limit")
   price        Float
-  
-  users       User[]
-  modules     PackageModule[]
-  
+  modules      PackageModule[]
+  users        User[]
+
   @@map("packages")
 }
 
 model Module {
-  id          String @id @default(uuid())
-  name        String @unique
-  description String?
-
-  userModules    UserModule[]
-  packageModules PackageModule[]
+  id             String          @id @default(uuid())
+  name           String          @unique
+  description    String?
   orgModules     OrgModule[]
+  packageModules PackageModule[]
+  userModules    UserModule[]
 
   @@map("modules")
 }
@@ -61,51 +58,47 @@ model Module {
 model UserModule {
   userId   String @map("user_id")
   moduleId String @map("module_id")
-  
-  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  module Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  
+  module   Module @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@id([userId, moduleId])
   @@map("user_modules")
 }
 
 model PackageModule {
-  packageId String @map("package_id")
-  moduleId  String @map("module_id")
-  
-  package Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
-  module  Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
-  
+  packageId String  @map("package_id")
+  moduleId  String  @map("module_id")
+  module    Module  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  package   Package @relation(fields: [packageId], references: [id], onDelete: Cascade)
+
   @@id([packageId, moduleId])
   @@map("package_modules")
 }
 
 model Patient {
-  id         String   @id @default(uuid())
-  userId     String   @map("user_id")
-  name       String
-  noteField  String?  @map("notes")
-  createdAt  DateTime @default(now()) @map("created_at")
-  
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  cases      Case[]
-  patientNotes Note[] @relation("PatientNotes")
-  
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  name         String
+  noteField    String?  @map("notes")
+  createdAt    DateTime @default(now()) @map("created_at")
+  cases        Case[]
+  patientNotes Note[]   @relation("PatientNotes")
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("patients")
 }
 
 model Case {
-  id          String   @id @default(uuid())
-  userId      String   @map("user_id")
-  patientId   String?  @map("patient_id")
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  patientId   String?   @map("patient_id")
   title       String
   description String?
-  createdAt   DateTime @default(now()) @map("created_at")
-  
-  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  patient  Patient?  @relation(fields: [patientId], references: [id], onDelete: SetNull)
-  sessions Session[]
-  
+  createdAt   DateTime  @default(now()) @map("created_at")
+  patient     Patient?  @relation(fields: [patientId], references: [id])
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions    Session[]
+
   @@map("cases")
 }
 
@@ -116,10 +109,9 @@ model Session {
   model      String
   tokensUsed Int      @map("tokens_used")
   createdAt  DateTime @default(now()) @map("created_at")
-  
-  user User  @relation(fields: [userId], references: [id], onDelete: Cascade)
-  case Case? @relation(fields: [caseId], references: [id], onDelete: SetNull)
-  
+  case       Case?    @relation(fields: [caseId], references: [id])
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("sessions")
 }
 
@@ -129,10 +121,9 @@ model Note {
   patientId String?  @map("patient_id")
   content   String
   createdAt DateTime @default(now()) @map("created_at")
-  
-  user    User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  patient Patient? @relation("PatientNotes", fields: [patientId], references: [id], onDelete: SetNull)
-  
+  patient   Patient? @relation("PatientNotes", fields: [patientId], references: [id])
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
   @@map("notes")
 }
 
@@ -141,64 +132,57 @@ model PomodoroLog {
   userId      String   @map("user_id")
   duration    Int
   completedAt DateTime @default(now()) @map("completed_at")
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("pomodoro_logs")
 }
 
-// ─────────────────────────────────────────────────────
-//  RESEARCH ORGANIZATION SYSTEM
-// ─────────────────────────────────────────────────────
-
 /// Bilimsel araştırma organizasyonu. Süper admin tarafından oluşturulur.
 /// Her org bir org_admin'e ve süreli erişime sahiptir.
 model ResearchOrganization {
-  id                String    @id @default(uuid())
+  id                String          @id @default(dbgenerated("(gen_random_uuid())::text"))
   name              String
-  slug              String    @unique
-  adminUserId       String    @map("admin_user_id")
-  status            String    @default("active")    // active | suspended | expired
-  startsAt          DateTime  @map("starts_at")
-  expiresAt         DateTime  @map("expires_at")
-  markupPct         Float     @default(30)           @map("markup_pct")      // Satış kâr marjı (%)
-  monthlyBudgetUsd  Float?    @map("monthly_budget_usd")                     // Aylık harcama tavanı (USD)
-  alertThresholdPct Int       @default(80)           @map("alert_threshold_pct") // Uyarı eşiği (% bütçe)
-  notes             String?                                                  // Sözleşme notları
-  createdAt         DateTime  @default(now())        @map("created_at")
-
-  adminUser    User                  @relation("OrgAdmin", fields: [adminUserId], references: [id])
-  members      OrgMember[]
-  modules      OrgModule[]
-  aiUsage      OrgAiUsage[]
-  invitations  OrgInvitation[]
+  slug              String          @unique
+  adminUserId       String          @map("admin_user_id")
+  status            String          @default("active")
+  startsAt          DateTime        @map("starts_at") @db.Timestamptz(6)
+  expiresAt         DateTime        @map("expires_at") @db.Timestamptz(6)
+  markupPct         Float           @default(30) @map("markup_pct")
+  monthlyBudgetUsd  Float?          @map("monthly_budget_usd")
+  alertThresholdPct Int             @default(80) @map("alert_threshold_pct")
+  notes             String?
+  createdAt         DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  aiUsage           OrgAiUsage[]
+  invitations       OrgInvitation[]
+  members           OrgMember[]
+  modules           OrgModule[]
+  adminUser         User            @relation("OrgAdmin", fields: [adminUserId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
   @@map("research_organizations")
 }
 
 /// Bir organizasyona üye kullanıcı. role: "org_admin" | "researcher"
 model OrgMember {
-  id       String   @id @default(uuid())
-  orgId    String   @map("org_id")
-  userId   String   @map("user_id")
-  role     String   @default("researcher")  // org_admin | researcher
-  isActive Boolean  @default(true)          @map("is_active")
-  joinedAt DateTime @default(now())         @map("joined_at")
-
-  org  ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  user User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id       String               @id @default(dbgenerated("(gen_random_uuid())::text"))
+  orgId    String               @map("org_id")
+  userId   String               @map("user_id")
+  role     String               @default("researcher")
+  isActive Boolean              @default(true) @map("is_active")
+  joinedAt DateTime             @default(now()) @map("joined_at") @db.Timestamptz(6)
+  org      ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@unique([orgId, userId])
+  @@index([userId], map: "idx_org_members_user_id")
   @@map("org_members")
 }
 
 /// Bir organizasyona açık olan modüller
 model OrgModule {
-  orgId    String @map("org_id")
-  moduleId String @map("module_id")
-
-  org    ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-  module Module               @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  orgId    String               @map("org_id")
+  moduleId String               @map("module_id")
+  module   Module               @relation(fields: [moduleId], references: [id], onDelete: Cascade, onUpdate: NoAction)
+  org      ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
   @@id([orgId, moduleId])
   @@map("org_modules")
@@ -206,46 +190,48 @@ model OrgModule {
 
 /// Araştırmacıların yaptığı her AI sorgusunun maliyeti
 model OrgAiUsage {
-  id           String   @id @default(uuid())
-  orgId        String   @map("org_id")
-  userId       String   @map("user_id")
-  module       String?                         // Hangi modülden yapıldı (ör: "ai-diagnosis")
-  model        String                          // Kullanılan AI modeli (ör: "claude-sonnet-4-6")
-  inputTokens  Int      @default(0)  @map("input_tokens")
-  outputTokens Int      @default(0)  @map("output_tokens")
-  costUsd      Float    @map("cost_usd")       // Gerçek maliyet (USD)
-  createdAt    DateTime @default(now()) @map("created_at")
+  id           String               @id @default(dbgenerated("(gen_random_uuid())::text"))
+  orgId        String               @map("org_id")
+  userId       String               @map("user_id")
+  module       String?
+  model        String
+  inputTokens  Int                  @default(0) @map("input_tokens")
+  outputTokens Int                  @default(0) @map("output_tokens")
+  costUsd      Float                @map("cost_usd")
+  createdAt    DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  org          ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: NoAction, onUpdate: NoAction)
+  user         User                 @relation(fields: [userId], references: [id], onDelete: NoAction, onUpdate: NoAction)
 
-  org  ResearchOrganization @relation(fields: [orgId], references: [id])
-  user User                 @relation(fields: [userId], references: [id])
-
+  @@index([createdAt], map: "idx_org_ai_usage_created_at")
+  @@index([orgId], map: "idx_org_ai_usage_org_id")
+  @@index([userId], map: "idx_org_ai_usage_user_id")
   @@map("org_ai_usage")
 }
 
 /// Org admin'in araştırmacılara e-posta ile gönderdiği davet token'ları
 model OrgInvitation {
-  id        String    @id @default(uuid())
-  orgId     String    @map("org_id")
+  id        String               @id @default(dbgenerated("(gen_random_uuid())::text"))
+  orgId     String               @map("org_id")
   email     String
-  token     String    @unique
-  role      String    @default("researcher")
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
+  token     String               @unique
+  role      String               @default("researcher")
+  expiresAt DateTime             @map("expires_at") @db.Timestamptz(6)
+  usedAt    DateTime?            @map("used_at") @db.Timestamptz(6)
+  createdAt DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  org       ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade, onUpdate: NoAction)
 
-  org ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
-
+  @@index([token], map: "idx_org_invitations_token")
   @@map("org_invitations")
 }
 
 /// AI model başına token maliyeti. Süper admin tarafından güncellenir.
 model ModelPricing {
-  id               String   @id @default(uuid())
+  id               String   @id @default(dbgenerated("(gen_random_uuid())::text"))
   model            String   @unique
   displayName      String   @map("display_name")
-  inputPricePer1k  Float    @map("input_price_per_1k")   // USD / 1K input token
-  outputPricePer1k Float    @map("output_price_per_1k")  // USD / 1K output token
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  inputPricePer1k  Float    @map("input_price_per_1k")
+  outputPricePer1k Float    @map("output_price_per_1k")
+  updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("model_pricing")
 }

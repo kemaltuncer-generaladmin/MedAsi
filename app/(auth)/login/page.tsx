@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState, useTransition } from 'react'
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { AlertCircle, Eye, EyeOff, Loader2, Lock, Mail } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
 import { login } from '@/lib/actions/auth'
@@ -19,6 +20,7 @@ export default function LoginPage() {
       try {
         await login(formData)
       } catch (submitError) {
+        if (isRedirectError(submitError)) throw submitError
         setError(submitError instanceof Error ? submitError.message : 'Bir hata oluştu')
       }
     })

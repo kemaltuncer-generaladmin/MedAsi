@@ -2,6 +2,7 @@
 
 import Link from 'next/link'
 import { useMemo, useState, useTransition } from 'react'
+import { isRedirectError } from 'next/dist/client/components/redirect-error'
 import { AlertCircle, ChevronDown, Eye, EyeOff, Loader2, Lock, Mail, User } from 'lucide-react'
 import { Button, Card, Input } from '@/components/ui'
 import { register } from '@/lib/actions/auth'
@@ -36,6 +37,7 @@ export default function RegisterPage() {
       try {
         await register(formData)
       } catch (submitError) {
+        if (isRedirectError(submitError)) throw submitError
         setError(submitError instanceof Error ? submitError.message : 'Bir hata oluştu')
       }
     })
