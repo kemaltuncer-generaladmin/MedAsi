@@ -27,7 +27,7 @@ export async function POST(request: NextRequest) {
     data: {
       userId: user.id,
       name: body.name,
-      notes: body.notes
+      noteField: body.notes
     }
   })
 

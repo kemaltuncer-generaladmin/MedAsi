@@ -14,16 +14,23 @@ model User {
   name       String?
   packageId  String   @map("package_id")
   role       String   @default("user")
-  createdAt  DateTime @default(now()) @map("created_at")
-  
-  package       Package        @relation(fields: [packageId], references: [id])
-  userModules   UserModule[]
-  patients      Patient[]
-  cases         Case[]
-  sessions      Session[]
-  notes         Note[]
-  pomodoroLogs  PomodoroLog[]
-  
+  createdAt            DateTime @default(now()) @map("created_at")
+  onboardingCompleted  Boolean  @default(false) @map("onboarding_completed")
+  goals                Json?
+  interests            Json?
+  notificationPrefs    Json?    @map("notification_prefs")
+
+  package          Package               @relation(fields: [packageId], references: [id])
+  userModules      UserModule[]
+  patients         Patient[]
+  cases            Case[]
+  sessions         Session[]
+  notes            Note[]
+  pomodoroLogs     PomodoroLog[]
+  orgAdmin         ResearchOrganization[] @relation("OrgAdmin")
+  orgMemberships   OrgMember[]
+  orgAiUsage       OrgAiUsage[]
+
   @@map("users")
 }
 
@@ -43,10 +50,11 @@ model Module {
   id          String @id @default(uuid())
   name        String @unique
   description String?
-  
+
   userModules    UserModule[]
   packageModules PackageModule[]
-  
+  orgModules     OrgModule[]
+
   @@map("modules")
 }
 
@@ -133,8 +141,111 @@ model PomodoroLog {
   userId      String   @map("user_id")
   duration    Int
   completedAt DateTime @default(now()) @map("completed_at")
-  
+
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
+
   @@map("pomodoro_logs")
+}
+
+// ─────────────────────────────────────────────────────
+//  RESEARCH ORGANIZATION SYSTEM
+// ─────────────────────────────────────────────────────
+
+/// Bilimsel araştırma organizasyonu. Süper admin tarafından oluşturulur.
+/// Her org bir org_admin'e ve süreli erişime sahiptir.
+model ResearchOrganization {
+  id                String    @id @default(uuid())
+  name              String
+  slug              String    @unique
+  adminUserId       String    @map("admin_user_id")
+  status            String    @default("active")    // active | suspended | expired
+  startsAt          DateTime  @map("starts_at")
+  expiresAt         DateTime  @map("expires_at")
+  markupPct         Float     @default(30)           @map("markup_pct")      // Satış kâr marjı (%)
+  monthlyBudgetUsd  Float?    @map("monthly_budget_usd")                     // Aylık harcama tavanı (USD)
+  alertThresholdPct Int       @default(80)           @map("alert_threshold_pct") // Uyarı eşiği (% bütçe)
+  notes             String?                                                  // Sözleşme notları
+  createdAt         DateTime  @default(now())        @map("created_at")
+
+  adminUser    User                  @relation("OrgAdmin", fields: [adminUserId], references: [id])
+  members      OrgMember[]
+  modules      OrgModule[]
+  aiUsage      OrgAiUsage[]
+  invitations  OrgInvitation[]
+
+  @@map("research_organizations")
+}
+
+/// Bir organizasyona üye kullanıcı. role: "org_admin" | "researcher"
+model OrgMember {
+  id       String   @id @default(uuid())
+  orgId    String   @map("org_id")
+  userId   String   @map("user_id")
+  role     String   @default("researcher")  // org_admin | researcher
+  isActive Boolean  @default(true)          @map("is_active")
+  joinedAt DateTime @default(now())         @map("joined_at")
+
+  org  ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([orgId, userId])
+  @@map("org_members")
+}
+
+/// Bir organizasyona açık olan modüller
+model OrgModule {
+  orgId    String @map("org_id")
+  moduleId String @map("module_id")
+
+  org    ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  module Module               @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@id([orgId, moduleId])
+  @@map("org_modules")
+}
+
+/// Araştırmacıların yaptığı her AI sorgusunun maliyeti
+model OrgAiUsage {
+  id           String   @id @default(uuid())
+  orgId        String   @map("org_id")
+  userId       String   @map("user_id")
+  module       String?                         // Hangi modülden yapıldı (ör: "ai-diagnosis")
+  model        String                          // Kullanılan AI modeli (ör: "claude-sonnet-4-6")
+  inputTokens  Int      @default(0)  @map("input_tokens")
+  outputTokens Int      @default(0)  @map("output_tokens")
+  costUsd      Float    @map("cost_usd")       // Gerçek maliyet (USD)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  org  ResearchOrganization @relation(fields: [orgId], references: [id])
+  user User                 @relation(fields: [userId], references: [id])
+
+  @@map("org_ai_usage")
+}
+
+/// Org admin'in araştırmacılara e-posta ile gönderdiği davet token'ları
+model OrgInvitation {
+  id        String    @id @default(uuid())
+  orgId     String    @map("org_id")
+  email     String
+  token     String    @unique
+  role      String    @default("researcher")
+  expiresAt DateTime  @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  org ResearchOrganization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@map("org_invitations")
+}
+
+/// AI model başına token maliyeti. Süper admin tarafından güncellenir.
+model ModelPricing {
+  id               String   @id @default(uuid())
+  model            String   @unique
+  displayName      String   @map("display_name")
+  inputPricePer1k  Float    @map("input_price_per_1k")   // USD / 1K input token
+  outputPricePer1k Float    @map("output_price_per_1k")  // USD / 1K output token
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("model_pricing")
 }

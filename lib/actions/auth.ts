@@ -26,11 +26,11 @@ export async function register(formData: FormData): Promise<void> {
   const { error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
-    options: { data: { name: parsed.data.name } },
+    options: { data: { name: parsed.data.name, seniority: parsed.data.seniority } },
   })
   if (error) throw new Error(error.message)
 
-  redirect(ROUTES.dashboard)
+  redirect('/verify-email')
 }
 
 export async function logout(): Promise<void> {

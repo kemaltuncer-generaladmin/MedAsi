@@ -48,6 +48,68 @@ function PulseDot({ color = PRIMARY }: { color?: string }) {
   )
 }
 
+// ─── Animated Line Chart ───
+function LiveChart() {
+  const BASE = [30, 45, 38, 55, 48, 62, 58, 70, 65, 78, 72, 85]
+  const [points, setPoints] = useState(BASE)
+  const [tick, setTick] = useState(0)
+
+  useEffect(() => {
+    const t = setInterval(() => {
+      setPoints(prev => {
+        const next = [...prev.slice(1), Math.min(95, Math.max(20, prev[prev.length - 1] + (Math.random() - 0.4) * 12))]
+        return next
+      })
+      setTick(p => p + 1)
+    }, 900)
+    return () => clearInterval(t)
+  }, [])
+
+  const W = 280, H = 64
+  const min = Math.min(...points), max = Math.max(...points)
+  const range = max - min || 1
+  const coords = points.map((v, i) => ({
+    x: (i / (points.length - 1)) * W,
+    y: H - ((v - min) / range) * (H - 8) - 4,
+  }))
+  const linePath = coords.map((c, i) => `${i === 0 ? 'M' : 'L'}${c.x.toFixed(1)},${c.y.toFixed(1)}`).join(' ')
+  const areaPath = `${linePath} L${W},${H} L0,${H} Z`
+  const last = coords[coords.length - 1]
+
+  return (
+    <div className="rounded-xl border p-3" style={{ borderColor: BORDER, background: '#0d0d12' }}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs font-semibold" style={{ color: MUTED }}>Performans Eğrisi</span>
+        <div className="flex items-center gap-1.5">
+          <PulseDot />
+          <span className="text-xs" style={{ color: PRIMARY }}>Canlı</span>
+        </div>
+      </div>
+      <svg width="100%" viewBox={`0 0 ${W} ${H}`} style={{ overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={PRIMARY} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={PRIMARY} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <path d={areaPath} fill="url(#chartGrad)" />
+        <path d={linePath} fill="none" stroke={PRIMARY} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+        <circle cx={last.x} cy={last.y} r="3" fill={PRIMARY} />
+        <circle cx={last.x} cy={last.y} r="6" fill={PRIMARY} fillOpacity="0.2">
+          <animate attributeName="r" values="4;8;4" dur="1.5s" repeatCount="indefinite" />
+          <animate attributeName="fill-opacity" values="0.3;0;0.3" dur="1.5s" repeatCount="indefinite" />
+        </circle>
+      </svg>
+      <div className="flex justify-between mt-1">
+        <span className="text-xs" style={{ color: MUTED, fontSize: '10px' }}>Son 12 Hafta</span>
+        <span className="text-xs font-semibold" style={{ color: PRIMARY, fontSize: '10px' }}>
+          {points[points.length - 1].toFixed(0)}% başarı
+        </span>
+      </div>
+    </div>
+  )
+}
+
 // ─── Mockup Dashboard ───
 function DashboardMockup() {
   const [active, setActive] = useState(0)
@@ -60,12 +122,6 @@ function DashboardMockup() {
     { label: 'Nabız', value: '72', unit: 'bpm', icon: Heart, color: '#ef4444' },
     { label: 'SpO2', value: '98', unit: '%', icon: Activity, color: PRIMARY },
     { label: 'Tanı Skoru', value: '94', unit: '%', icon: Zap, color: '#10b981' },
-  ]
-
-  const diagnoses = [
-    { name: 'Pnömoni (Sol Bazal)', prob: 87 },
-    { name: 'Plevral Efüzyon', prob: 64 },
-    { name: 'Tüberküloz (Latent)', prob: 31 },
   ]
 
   return (
@@ -84,7 +140,7 @@ function DashboardMockup() {
             <div className="w-3 h-3 rounded-full bg-green-500/80" />
           </div>
           <div className="flex-1 mx-4 rounded-md px-3 py-1 text-xs" style={{ background: BORDER, color: MUTED }}>
-            medasi.com.tr/ai-diagnosis
+            medasi.com.tr/dashboard
           </div>
           <PulseDot />
         </div>
@@ -105,26 +161,8 @@ function DashboardMockup() {
             ))}
           </div>
 
-          {/* Diagnoses */}
-          <div className="rounded-xl border p-4 space-y-3" style={{ borderColor: BORDER, background: '#0d0d12' }}>
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold" style={{ color: MUTED }}>AI Ayırıcı Tanı</span>
-              <span className="text-xs px-2 py-0.5 rounded-full font-medium"
-                style={{ background: `${PRIMARY}20`, color: PRIMARY }}>Canlı</span>
-            </div>
-            {diagnoses.map((d, i) => (
-              <div key={i} className="space-y-1">
-                <div className="flex justify-between text-xs">
-                  <span style={{ color: TEXT }}>{d.name}</span>
-                  <span style={{ color: i === 0 ? PRIMARY : MUTED }}>{d.prob}%</span>
-                </div>
-                <div className="h-1.5 rounded-full overflow-hidden" style={{ background: BORDER }}>
-                  <div className="h-full rounded-full transition-all duration-1000"
-                    style={{ width: `${d.prob}%`, background: i === 0 ? PRIMARY : `${PRIMARY}50` }} />
-                </div>
-              </div>
-            ))}
-          </div>
+          {/* Live Chart */}
+          <LiveChart />
 
           {/* AI Input */}
           <div className="flex gap-2">

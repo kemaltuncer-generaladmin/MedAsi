@@ -14,6 +14,10 @@ const variantClass = {
   secondary: 'bg-[var(--color-surface-elevated)] text-[var(--color-text-secondary)] border border-[var(--color-border)]',
 }
 
+export function badgeVariants({ variant = 'default' }: { variant?: BadgeProps['variant'] } = {}) {
+  return variantClass[variant ?? 'default']
+}
+
 export function Badge({ children, variant = 'default', className = '' }: BadgeProps) {
   return (
     <span
