@@ -40,7 +40,7 @@ async function requireOrgAdmin() {
 //  SUPER ADMIN — Organizasyon CRUD
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type CreateOrgInput = {
+type CreateOrgInput = {
   name: string
   slug: string
   adminEmail: string        // Bu e-posta sahibi org_admin olacak
