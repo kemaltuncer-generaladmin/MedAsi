@@ -9,26 +9,40 @@ datasource db {
 }
 
 model User {
-  id                  String                 @id @default(uuid())
-  email               String                 @unique
-  name                String?
-  packageId           String                 @map("package_id")
-  role                String                 @default("user")
-  createdAt           DateTime               @default(now()) @map("created_at")
-  goals               Json?
-  interests           Json?
-  notificationPrefs   Json?                  @map("notification_prefs")
-  onboardingCompleted Boolean                @default(false) @map("onboarding_completed")
-  cases               Case[]
-  notes               Note[]
-  orgAiUsage          OrgAiUsage[]
-  orgMemberships      OrgMember[]
-  patients            Patient[]
-  pomodoroLogs        PomodoroLog[]
-  orgAdmin            ResearchOrganization[] @relation("OrgAdmin")
-  sessions            Session[]
-  userModules         UserModule[]
-  package             Package                @relation(fields: [packageId], references: [id])
+  id                       String                  @id @default(uuid())
+  email                    String                  @unique
+  name                     String?
+  packageId                String                  @map("package_id")
+  role                     String                  @default("user")
+  createdAt                DateTime                @default(now()) @map("created_at")
+  goals                    Json?
+  interests                Json?
+  notificationPrefs        Json?                   @map("notification_prefs")
+  onboardingCompleted      Boolean                 @default(false) @map("onboarding_completed")
+  termsAcceptedAt          DateTime?               @map("terms_accepted_at")
+  privacyAcceptedAt        DateTime?               @map("privacy_accepted_at")
+  medicalConsentAcceptedAt DateTime?               @map("medical_consent_accepted_at")
+  legalConsentVersion      String?                 @map("legal_consent_version")
+  legalConsentIp           String?                 @map("legal_consent_ip")
+  legalConsentUserAgent    String?                 @map("legal_consent_user_agent")
+  subscriptionExpiresAt    DateTime?               @map("subscription_expires_at")
+  couponUsed               String?                 @map("coupon_used")
+  cases                    Case[]
+  notes                    Note[]
+  orgAiUsage               OrgAiUsage[]
+  orgMemberships           OrgMember[]
+  patients                 Patient[]
+  pomodoroLogs             PomodoroLog[]
+  orgAdmin                 ResearchOrganization[]  @relation("OrgAdmin")
+  sessions                 Session[]
+  userModules              UserModule[]
+  package                  Package                 @relation(fields: [packageId], references: [id])
+  learningProfile          StudentLearningProfile?
+  questionAttempts         QuestionAttempt[]
+  tokenWallet              TokenWallet?
+  tokenTransactions        TokenTransaction[]
+  dashboardPreferences     DashboardPreferences?
+  studySessions            StudySession[]
 
   @@map("users")
 }
@@ -38,8 +52,10 @@ model Package {
   name         String          @unique
   dailyAiLimit Int             @map("daily_ai_limit")
   price        Float
+  tokenGrant   BigInt          @default(0) @map("token_grant")
   modules      PackageModule[]
   users        User[]
+  coupons      CouponCode[]
 
   @@map("packages")
 }
@@ -234,4 +250,229 @@ model ModelPricing {
   updatedAt        DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@map("model_pricing")
+}
+
+/// Admin tarafından yüklenen soru bankası havuzu
+model PoolQuestion {
+  id           String   @id @default(uuid())
+  subject      String   /// Konu (örn. "Kardiyoloji")
+  difficulty   String   @default("orta") /// "kolay" | "orta" | "zor"
+  questionText String   @map("question_text") @db.Text
+  options      Json     /// [{label: "A", text: "..."}, ...]
+  correctAnswer String  @map("correct_answer") /// "A" | "B" | "C" | "D" | "E"
+  explanation  String?  @db.Text
+  tags         Json     @default("[]")
+  source       String?  /// Upload batch ID or manual
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([subject])
+  @@index([difficulty])
+  @@map("pool_questions")
+}
+
+/// Admin tarafından yüklenen flashcard havuzu
+model PoolFlashcard {
+  id        String   @id @default(uuid())
+  subject   String
+  front     String   @db.Text
+  back      String   @db.Text
+  tags      Json     @default("[]")
+  source    String?  /// Upload batch ID
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([subject])
+  @@map("pool_flashcards")
+}
+
+// ─── EK MODELLER ─────────────────────────────────────────────────────────────
+
+/// Admin tarafından oluşturulan kupon kodları.
+model CouponCode {
+  id           String    @id @default(uuid())
+  code         String    @unique
+  packageId    String    @map("package_id")
+  durationDays Int?      @map("duration_days")
+  maxUses      Int?      @map("max_uses")
+  usedCount    Int       @default(0) @map("used_count")
+  isActive     Boolean   @default(true) @map("is_active")
+  expiresAt    DateTime? @map("expires_at")
+  note         String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  package Package @relation(fields: [packageId], references: [id])
+
+  @@map("coupon_codes")
+}
+
+model DocumentChunk {
+  id        String                      @id @default(uuid())
+  title     String
+  branch    String
+  content   String                      @db.Text
+  embedding Unsupported("vector(768)")?
+  metadata  Json?
+  createdAt DateTime                    @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@map("document_chunks")
+}
+
+model StudentLearningProfile {
+  id               String    @id @default(uuid())
+  userId           String    @unique @map("user_id")
+  topicMastery     Json      @default("{}") @map("topic_mastery")
+  weakAreas        Json      @default("[]") @map("weak_areas")
+  strongAreas      Json      @default("[]") @map("strong_areas")
+  aiSummary        String?   @map("ai_summary")
+  totalQuestions   Int       @default(0) @map("total_questions")
+  totalCorrect     Int       @default(0) @map("total_correct")
+  lastAnalyzedAt   DateTime  @default(now()) @map("last_analyzed_at")
+  mentorInsights   Json?     @map("mentor_insights")
+  motivationScore  Int?      @map("motivation_score")
+  lastMentorChatAt DateTime? @map("last_mentor_chat_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("student_learning_profiles")
+}
+
+model DashboardPreferences {
+  id        String   @id @default(uuid())
+  userId    String   @unique @map("user_id")
+  widgets   Json     @default("[]")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("dashboard_preferences")
+}
+
+model StudySession {
+  id          String    @id @default(uuid())
+  userId      String    @map("user_id")
+  startedAt   DateTime  @default(now()) @map("started_at")
+  endedAt     DateTime? @map("ended_at")
+  durationMin Int?      @map("duration_min")
+  notes       String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, startedAt])
+  @@map("study_sessions")
+}
+
+model QuestionAttempt {
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  subject      String
+  difficulty   String
+  questionText String   @map("question_text")
+  isCorrect    Boolean  @map("is_correct")
+  attemptedAt  DateTime @default(now()) @map("attempted_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subject])
+  @@index([userId, attemptedAt])
+  @@map("question_attempts")
+}
+
+model Deck {
+  id        String      @id @default(uuid())
+  name      String
+  subject   String
+  color     String
+  cards     Flashcard[]
+  createdAt DateTime    @default(now())
+}
+
+model Flashcard {
+  id         String    @id @default(uuid())
+  front      String    @db.Text
+  back       String    @db.Text
+  rating     String    @default("unknown")
+  nextReview DateTime?
+  deckId     String
+  deck       Deck      @relation(fields: [deckId], references: [id], onDelete: Cascade)
+}
+
+model ActivePlan {
+  id        String   @id @default("user_active_plan")
+  content   String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model TokenWallet {
+  id           String             @id @default(uuid())
+  userId       String             @unique @map("user_id")
+  balance      BigInt             @default(0)
+  totalEarned  BigInt             @default(0) @map("total_earned")
+  totalSpent   BigInt             @default(0) @map("total_spent")
+  updatedAt    DateTime           @updatedAt @map("updated_at")
+
+  user         User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions TokenTransaction[]
+
+  @@map("token_wallets")
+}
+
+model TokenTransaction {
+  id           String      @id @default(uuid())
+  walletId     String      @map("wallet_id")
+  userId       String      @map("user_id")
+  type         String
+  amount       BigInt
+  balanceAfter BigInt      @map("balance_after")
+  description  String
+  model        String?
+  module       String?
+  refId        String?     @map("ref_id")
+  createdAt    DateTime    @default(now()) @map("created_at")
+
+  wallet TokenWallet @relation(fields: [walletId], references: [id], onDelete: Cascade)
+  user   User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([walletId, createdAt])
+  @@index([type])
+  @@map("token_transactions")
+}
+
+model TokenPackage {
+  id        String   @id @default(uuid())
+  name      String
+  tokens    BigInt
+  bonusPct  Int      @default(0) @map("bonus_pct")
+  priceTry  Float    @map("price_try")
+  priceUsd  Float    @map("price_usd")
+  isActive  Boolean  @default(true) @map("is_active")
+  isPopular Boolean  @default(false) @map("is_popular")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("token_packages")
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("system_settings")
+}
+
+model SystemLog {
+  id        String   @id @default(uuid())
+  level     String
+  category  String
+  message   String
+  details   String?  @db.Text
+  userId    String?  @map("user_id")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@index([level])
+  @@index([category])
+  @@map("system_logs")
 }

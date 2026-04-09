@@ -9,14 +9,18 @@ import {
   Settings,
   FileText,
   ArrowLeft,
+  LogOut,
   BrainCircuit,
   FlaskConical,
+  Puzzle,
 } from 'lucide-react'
+import { logout } from '@/lib/actions/auth'
 
 const navItems = [
   { href: '/admin', icon: LayoutDashboard, label: 'Genel Bakış' },
   { href: '/admin/users', icon: Users, label: 'Kullanıcılar' },
   { href: '/admin/packages', icon: Package, label: 'Paketler' },
+  { href: '/admin/modules', icon: Puzzle, label: 'Modüller' },
   { href: '/admin/organizations', icon: FlaskConical, label: 'Araştırma Org.' },
   { href: '/admin/settings', icon: Settings, label: 'Sistem Ayarları' },
   { href: '/admin/logs', icon: FileText, label: 'Aktivite Günlüğü' },
@@ -59,7 +63,7 @@ export function AdminSidebar() {
       </div>
 
       <div
-        className="p-4"
+        className="p-4 space-y-2"
         style={{ borderTop: '1px solid var(--color-border)' }}
       >
         <Link
@@ -73,6 +77,26 @@ export function AdminSidebar() {
           <ArrowLeft size={16} />
           Platforma Dön
         </Link>
+        <form action={logout}>
+          <button
+            type="submit"
+            className="w-full flex items-center gap-3 px-4 py-2.5 rounded-md text-sm font-medium transition-colors"
+            style={{
+              color: 'var(--color-destructive)',
+              backgroundColor: 'transparent',
+            }}
+            onMouseEnter={(e) => {
+              ;(e.currentTarget as HTMLButtonElement).style.backgroundColor =
+                'color-mix(in srgb, var(--color-destructive) 10%, transparent)'
+            }}
+            onMouseLeave={(e) => {
+              ;(e.currentTarget as HTMLButtonElement).style.backgroundColor = 'transparent'
+            }}
+          >
+            <LogOut size={16} />
+            Çıkış Yap
+          </button>
+        </form>
       </div>
     </aside>
   )

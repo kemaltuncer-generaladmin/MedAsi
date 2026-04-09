@@ -20,10 +20,20 @@ import {
   UserCog,
   PackageOpen,
   Eye,
+  Layers,
 } from 'lucide-react'
 import { Badge, badgeVariants } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { getUsers, updateUserRole, updateUserPackage, getPackages } from '@/lib/actions/admin'
+import {
+  getUsers,
+  updateUserRole,
+  updateUserPackage,
+  getPackages,
+  getModules,
+  getUserModules,
+  updateUserModules,
+  createUser,
+} from '@/lib/actions/admin'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,6 +42,12 @@ type Package = {
   name: string
   dailyAiLimit: number
   price: number
+}
+
+type Module = {
+  id: string
+  name: string
+  description: string | null
 }
 
 type User = {
@@ -449,6 +465,381 @@ function DetailModal({ user, onClose }: { user: User; onClose: () => void }) {
   )
 }
 
+// ─── Modal: Create User ───────────────────────────────────────────────────────
+
+function CreateUserModal({
+  packages,
+  onClose,
+  onSuccess,
+}: {
+  packages: Package[]
+  onClose: () => void
+  onSuccess: () => void
+}) {
+  const [form, setForm] = useState({
+    name: '',
+    email: '',
+    password: '',
+    role: 'user',
+    packageId: packages[0]?.id ?? '',
+  })
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setLoading(true)
+    setError(null)
+    try {
+      await createUser(form)
+      onSuccess()
+      onClose()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Kullanıcı oluşturulurken hata oluştu.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const inputStyle = {
+    backgroundColor: 'var(--color-background)',
+    border: '1px solid var(--color-border)',
+    color: 'var(--color-text-primary)',
+    outline: 'none',
+  }
+
+  return ( // NOSONAR
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-xl w-full max-w-md shadow-2xl"
+        style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: 'var(--color-background)' }}
+            >
+              <UserPlus size={18} style={{ color: 'var(--color-primary)' }} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                Kullanıcı Ekle
+              </h2>
+              <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                Yeni kullanıcı oluştur
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          {error && (
+            <div
+              className="flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm"
+              style={{
+                backgroundColor: 'color-mix(in srgb, var(--color-destructive) 10%, transparent)',
+                border: '1px solid var(--color-destructive)',
+                color: 'var(--color-destructive)',
+              }}
+            >
+              <AlertCircle size={14} />
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+              Ad Soyad
+            </label>
+            <input
+              type="text"
+              required
+              value={form.name}
+              onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              className="w-full rounded-md px-3 py-2 text-sm"
+              style={inputStyle}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+              placeholder="Adı Soyadı"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+              E-posta
+            </label>
+            <input
+              type="email"
+              required
+              value={form.email}
+              onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+              className="w-full rounded-md px-3 py-2 text-sm"
+              style={inputStyle}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+              placeholder="ornek@mail.com"
+            />
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+              Şifre
+            </label>
+            <input
+              type="password"
+              required
+              minLength={6}
+              value={form.password}
+              onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
+              className="w-full rounded-md px-3 py-2 text-sm"
+              style={inputStyle}
+              onFocus={(e) => (e.currentTarget.style.borderColor = 'var(--color-primary)')}
+              onBlur={(e) => (e.currentTarget.style.borderColor = 'var(--color-border)')}
+              placeholder="En az 6 karakter"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+                Rol
+              </label>
+              <select
+                value={form.role}
+                onChange={(e) => setForm((f) => ({ ...f, role: e.target.value }))}
+                className="w-full rounded-md px-3 py-2 text-sm"
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                <option value="user">Kullanıcı</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-medium uppercase tracking-wider" style={{ color: 'var(--color-text-secondary)' }}>
+                Paket
+              </label>
+              <select
+                value={form.packageId}
+                onChange={(e) => setForm((f) => ({ ...f, packageId: e.target.value }))}
+                className="w-full rounded-md px-3 py-2 text-sm"
+                style={{ ...inputStyle, cursor: 'pointer' }}
+              >
+                {packages.map((pkg) => (
+                  <option key={pkg.id} value={pkg.id}>
+                    {pkg.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex gap-3 justify-end pt-1">
+            <Button variant="ghost" size="sm" type="button" onClick={onClose} disabled={loading}>
+              Vazgeç
+            </Button>
+            <Button variant="primary" size="sm" type="submit" loading={loading}>
+              Kullanıcı Oluştur
+            </Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal: Module Access ─────────────────────────────────────────────────────
+
+function ModuleAccessModal({
+  user,
+  modules,
+  onClose,
+}: {
+  user: User
+  modules: Module[]
+  onClose: () => void
+}) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [loadingModules, setLoadingModules] = useState(true)
+  const [saving, setSaving] = useState(false)
+  const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    getUserModules(user.id)
+      .then((ids) => setSelectedIds(ids))
+      .catch(() => setError('Modüller yüklenemedi.'))
+      .finally(() => setLoadingModules(false))
+  }, [user.id])
+
+  const toggle = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+    setSuccess(false)
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    setError(null)
+    setSuccess(false)
+    try {
+      await updateUserModules(user.id, selectedIds)
+      setSuccess(true)
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Kaydedilemedi.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return ( // NOSONAR
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-xl w-full max-w-md shadow-2xl"
+        style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div
+          className="flex items-center justify-between px-6 py-4"
+          style={{ borderBottom: '1px solid var(--color-border)' }}
+        >
+          <div className="flex items-center gap-3">
+            <div
+              className="w-9 h-9 rounded-full flex items-center justify-center"
+              style={{ backgroundColor: 'var(--color-background)' }}
+            >
+              <Layers size={18} style={{ color: 'var(--color-primary)' }} />
+            </div>
+            <div>
+              <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                Modül Erişimi
+              </h2>
+              <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                {user.name ?? user.email}
+              </p>
+            </div>
+          </div>
+          <button onClick={onClose} className="rounded-md p-1.5" style={{ color: 'var(--color-text-secondary)' }}>
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="px-6 py-5">
+          {loadingModules ? (
+            <div className="space-y-2">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-10 rounded-lg animate-pulse"
+                  style={{ backgroundColor: 'var(--color-background)' }}
+                />
+              ))}
+            </div>
+          ) : modules.length === 0 ? (
+            <p className="text-sm text-center py-4" style={{ color: 'var(--color-text-secondary)' }}>
+              Henüz modül tanımlanmamış.
+            </p>
+          ) : (
+            <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
+              {modules.map((mod) => {
+                const checked = selectedIds.includes(mod.id)
+                return (
+                  <label
+                    key={mod.id}
+                    className="flex items-center gap-3 rounded-lg px-3 py-2.5 cursor-pointer transition-colors"
+                    style={{
+                      backgroundColor: checked ? 'color-mix(in srgb, var(--color-primary) 8%, transparent)' : 'var(--color-background)',
+                      border: `1px solid ${checked ? 'var(--color-primary)' : 'var(--color-border)'}`,
+                    }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(mod.id)}
+                      className="shrink-0"
+                      style={{ accentColor: 'var(--color-primary)' }}
+                    />
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                        {mod.name}
+                      </p>
+                      {mod.description && (
+                        <p className="text-xs truncate" style={{ color: 'var(--color-text-secondary)' }}>
+                          {mod.description}
+                        </p>
+                      )}
+                    </div>
+                  </label>
+                )
+              })}
+            </div>
+          )}
+
+          {error && (
+            <div
+              className="flex items-center gap-2 mt-3 rounded-lg px-3 py-2 text-sm"
+              style={{
+                backgroundColor: 'color-mix(in srgb, var(--color-destructive) 10%, transparent)',
+                border: '1px solid var(--color-destructive)',
+                color: 'var(--color-destructive)',
+              }}
+            >
+              <AlertCircle size={14} />
+              {error}
+            </div>
+          )}
+
+          {success && (
+            <div
+              className="flex items-center gap-2 mt-3 rounded-lg px-3 py-2 text-sm"
+              style={{
+                backgroundColor: 'color-mix(in srgb, var(--color-success) 10%, transparent)',
+                border: '1px solid var(--color-success)',
+                color: 'var(--color-success)',
+              }}
+            >
+              <Check size={14} />
+              Modül erişimleri güncellendi.
+            </div>
+          )}
+
+          <div className="flex gap-3 justify-end mt-4">
+            <Button variant="ghost" size="sm" onClick={onClose}>
+              Kapat
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              loading={saving}
+              onClick={handleSave}
+              disabled={loadingModules || modules.length === 0}
+            >
+              Kaydet
+            </Button>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20
@@ -456,6 +847,7 @@ const PAGE_SIZE = 20
 export default function UsersPage() {
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [packages, setPackages] = useState<Package[]>([])
+  const [modules, setModules] = useState<Module[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -468,6 +860,8 @@ export default function UsersPage() {
   const [roleModal, setRoleModal] = useState<User | null>(null)
   const [packageModal, setPackageModal] = useState<User | null>(null)
   const [detailModal, setDetailModal] = useState<User | null>(null)
+  const [moduleModal, setModuleModal] = useState<User | null>(null)
+  const [createModal, setCreateModal] = useState(false)
   const [mutating, setMutating] = useState(false)
 
   const fetchData = useCallback(async (silent = false) => {
@@ -475,9 +869,10 @@ export default function UsersPage() {
     else setRefreshing(true)
     setError(null)
     try {
-      const [users, pkgs] = await Promise.all([getUsers(), getPackages()])
+      const [users, pkgs, mods] = await Promise.all([getUsers(), getPackages(), getModules()])
       setAllUsers(users as User[])
       setPackages(pkgs as Package[])
+      setModules(mods as Module[])
     } catch (e) {
       setError('Kullanıcılar yüklenirken hata oluştu.')
       console.error(e)
@@ -582,7 +977,11 @@ export default function UsersPage() {
               Tüm kullanıcıları görüntüle ve yönet
             </p>
           </div>
-          <div>
+          <div className="flex items-center gap-2">
+            <Button variant="primary" size="sm" onClick={() => setCreateModal(true)}>
+              <UserPlus size={14} />
+              Kullanıcı Ekle
+            </Button>
             <Button variant="ghost" size="sm" onClick={() => fetchData(true)} disabled={refreshing}>
               <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
               Yenile
@@ -955,6 +1354,27 @@ export default function UsersPage() {
                             <Eye size={13} />
                             <span className="hidden sm:inline">Detay</span>
                           </button>
+                          <button
+                            onClick={() => setModuleModal(user)}
+                            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                            style={{
+                              backgroundColor: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              color: 'var(--color-text-secondary)',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-primary)'
+                              e.currentTarget.style.borderColor = 'var(--color-primary)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-secondary)'
+                              e.currentTarget.style.borderColor = 'var(--color-border)'
+                            }}
+                            title="Modül Erişimi"
+                          >
+                            <Layers size={13} />
+                            <span className="hidden sm:inline">Modül</span>
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -1043,6 +1463,20 @@ export default function UsersPage() {
       )}
       {detailModal && (
         <DetailModal user={detailModal} onClose={() => setDetailModal(null)} />
+      )}
+      {moduleModal && (
+        <ModuleAccessModal
+          user={moduleModal}
+          modules={modules}
+          onClose={() => setModuleModal(null)}
+        />
+      )}
+      {createModal && (
+        <CreateUserModal
+          packages={packages}
+          onClose={() => setCreateModal(false)}
+          onSuccess={() => fetchData(true)}
+        />
       )}
     </div>
   )

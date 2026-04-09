@@ -1,379 +1,479 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { Input } from '@/components/ui/Input'
 import { Badge } from '@/components/ui/Badge'
-import { Save, RotateCcw, Clock } from 'lucide-react'
+import {
+  Upload,
+  Trash2,
+  BookOpen,
+  Layers,
+  AlertCircle,
+  CheckCircle2,
+  Download,
+  ChevronDown,
+} from 'lucide-react'
 import toast from 'react-hot-toast'
+import { getPoolStats, deletePoolItems } from '@/lib/actions/admin'
 
-const STORAGE_KEY = 'medasi_admin_content_v1'
+// ─── JSON Example Templates ─────────────────────────────────────────────────
 
-interface SiteContent {
-  heroTitle: string
-  heroSubtitle: string
-  heroDesc: string
-  stat1Value: string
-  stat1Label: string
-  stat2Value: string
-  stat2Label: string
-  stat3Value: string
-  stat3Label: string
-  ctaButtonText: string
-  footerText: string
-  contactEmail: string
-  supportText: string
+const QUESTION_EXAMPLE = [
+  {
+    subject: 'Kardiyoloji',
+    difficulty: 'orta',
+    questionText: 'Miyokard enfarktüsünde en erken yükselen biyobelirteç hangisidir?',
+    options: [
+      { label: 'A', text: 'Troponin I' },
+      { label: 'B', text: 'CK-MB' },
+      { label: 'C', text: 'Miyoglobin' },
+      { label: 'D', text: 'LDH' },
+      { label: 'E', text: 'AST' },
+    ],
+    correctAnswer: 'C',
+    explanation: 'Miyoglobin, 1-4 saat içinde yükselir; en erken biyobelirteçtir.',
+    tags: ['kalp', 'biyobelirteç', 'enfarktüs'],
+  },
+]
+
+const FLASHCARD_EXAMPLE = [
+  {
+    subject: 'Kardiyoloji',
+    front: 'MI sonrası en erken yükselen biyobelirteç nedir?',
+    back: 'Miyoglobin — 1-4 saat içinde yükselir.',
+    tags: ['kalp', 'biyobelirteç'],
+  },
+]
+
+function downloadJson(data: unknown, filename: string) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
 
-const DEFAULTS: SiteContent = {
-  heroTitle: 'Tıbbi Eğitimde Yapay Zeka:',
-  heroSubtitle: 'Sıfır Risk. Sonsuz Pratik.',
-  heroDesc: "400.000'den fazla vaka ile gerçek klinik senaryolar üzerinde sınırsız pratik yapın.",
-  stat1Value: '400000',
-  stat1Label: 'Klinik Vaka',
-  stat2Value: '2000',
-  stat2Label: 'Aktif Kullanıcı',
-  stat3Value: '94',
-  stat3Label: 'Başarı Oranı (%)',
-  ctaButtonText: '30 Dakikalık Demo Al',
-  footerText: '© 2026. Tüm hakları saklıdır.',
-  contactEmail: 'destek@medasi.com.tr',
-  supportText: 'Herhangi bir sorunuz veya teknik destek talebiniz için destek@medasi.com.tr adresine yazabilirsiniz.',
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+interface PoolStats {
+  questions: number
+  flashcards: number
+  subjects: string[]
 }
 
-function formatTime(date: Date): string {
-  return new Intl.DateTimeFormat('tr-TR', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).format(date)
+interface UploadResult {
+  inserted: number
+  errors: string[]
 }
 
-export default function ContentPage() {
-  const [content, setContent] = useState<SiteContent>(DEFAULTS)
-  const [saved, setSaved] = useState<SiteContent>(DEFAULTS)
-  const [lastSavedAt, setLastSavedAt] = useState<Date | null>(null)
-  const [mounted, setMounted] = useState(false)
+// ─── Upload Card ─────────────────────────────────────────────────────────────
 
-  const isDirty = JSON.stringify(content) !== JSON.stringify(saved)
+function UploadCard({
+  type,
+  title,
+  icon: Icon,
+  stats,
+  onRefresh,
+}: {
+  type: 'questions' | 'flashcards'
+  title: string
+  icon: React.ElementType
+  stats: PoolStats | null
+  onRefresh: () => void
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  const [dragging, setDragging] = useState(false)
+  const [uploading, setUploading] = useState(false)
+  const [result, setResult] = useState<UploadResult | null>(null)
+  const [deleteSubject, setDeleteSubject] = useState('')
+  const [deleting, setDeleting] = useState(false)
+  const [showSubjectSelect, setShowSubjectSelect] = useState(false)
 
-  useEffect(() => {
-    setMounted(true)
+  const count = stats ? (type === 'questions' ? stats.questions : stats.flashcards) : null
+
+  async function handleFile(file: File) {
+    if (!file.name.endsWith('.json')) {
+      toast.error('Sadece .json dosyaları kabul edilir.')
+      return
+    }
+    setUploading(true)
+    setResult(null)
     try {
-      const stored = localStorage.getItem(STORAGE_KEY)
-      if (stored) {
-        const parsed = JSON.parse(stored) as { content: SiteContent; savedAt: string }
-        setContent(parsed.content)
-        setSaved(parsed.content)
-        setLastSavedAt(new Date(parsed.savedAt))
+      const fd = new FormData()
+      fd.append('file', file)
+      fd.append('type', type)
+      const res = await fetch('/api/admin/pool', { method: 'POST', body: fd })
+      const data = (await res.json()) as UploadResult & { error?: string }
+      if (!res.ok) {
+        toast.error(data.error ?? 'Yükleme başarısız.')
+      } else {
+        setResult(data)
+        toast.success(`${data.inserted} kayıt eklendi.`)
+        onRefresh()
       }
     } catch {
-      // ignore parse errors
+      toast.error('Ağ hatası.')
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  function onDrop(e: React.DragEvent) {
+    e.preventDefault()
+    setDragging(false)
+    const file = e.dataTransfer.files[0]
+    if (file) handleFile(file)
+  }
+
+  async function handleDelete() {
+    const confirmed = window.confirm(
+      deleteSubject
+        ? `"${deleteSubject}" konusundaki tüm ${title.toLowerCase()} silinecek. Emin misiniz?`
+        : `Tüm ${title.toLowerCase()} silinecek. Emin misiniz?`
+    )
+    if (!confirmed) return
+    setDeleting(true)
+    try {
+      const res = await deletePoolItems(type, deleteSubject || undefined)
+      toast.success(`${res.deleted} kayıt silindi.`)
+      setDeleteSubject('')
+      onRefresh()
+    } catch {
+      toast.error('Silme işlemi başarısız.')
+    } finally {
+      setDeleting(false)
+    }
+  }
+
+  const subjects = stats?.subjects ?? []
+
+  return (
+    <Card variant="bordered">
+      <CardHeader>
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <CardTitle className="flex items-center gap-2">
+            <Icon size={18} style={{ color: 'var(--color-primary)' }} />
+            {title}
+          </CardTitle>
+          <div className="flex items-center gap-2">
+            {count !== null && (
+              <Badge variant="default">
+                {count.toLocaleString('tr-TR')} kayıt
+              </Badge>
+            )}
+            <button
+              onClick={() =>
+                downloadJson(
+                  type === 'questions' ? QUESTION_EXAMPLE : FLASHCARD_EXAMPLE,
+                  type === 'questions' ? 'soru-ornek.json' : 'flashcard-ornek.json'
+                )
+              }
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 rounded-md border transition-colors"
+              style={{
+                borderColor: 'var(--color-border)',
+                color: 'var(--color-text-secondary)',
+              }}
+              title="Örnek JSON indir"
+            >
+              <Download size={12} />
+              Örnek JSON
+            </button>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-5">
+        {/* Drop zone */}
+        <div
+          onDragOver={(e) => {
+            e.preventDefault()
+            setDragging(true)
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={onDrop}
+          onClick={() => inputRef.current?.click()}
+          className="rounded-xl border-2 border-dashed flex flex-col items-center justify-center gap-3 p-8 cursor-pointer transition-colors select-none"
+          style={{
+            borderColor: dragging ? 'var(--color-primary)' : 'var(--color-border)',
+            backgroundColor: dragging
+              ? 'color-mix(in srgb, var(--color-primary) 6%, transparent)'
+              : 'var(--color-surface-elevated)',
+          }}
+        >
+          <div
+            className="rounded-full p-3"
+            style={{
+              backgroundColor: 'color-mix(in srgb, var(--color-primary) 12%, transparent)',
+            }}
+          >
+            <Upload size={22} style={{ color: 'var(--color-primary)' }} />
+          </div>
+          <div className="text-center">
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+              {uploading ? 'Yükleniyor...' : 'JSON dosyasını sürükleyin veya tıklayın'}
+            </p>
+            <p className="text-xs mt-0.5" style={{ color: 'var(--color-text-disabled)' }}>
+              Yalnızca .json formatı
+            </p>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={(e) => {
+              const file = e.target.files?.[0]
+              if (file) handleFile(file)
+              e.target.value = ''
+            }}
+          />
+        </div>
+
+        {/* Upload result */}
+        {result && (
+          <div
+            className="rounded-lg p-4 space-y-2"
+            style={{
+              backgroundColor: 'var(--color-surface-elevated)',
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <CheckCircle2 size={15} style={{ color: 'var(--color-success, #22c55e)' }} />
+              <span className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                {result.inserted} kayıt başarıyla eklendi
+              </span>
+            </div>
+            {result.errors.length > 0 && (
+              <div className="space-y-1 pt-1">
+                <div className="flex items-center gap-1.5">
+                  <AlertCircle size={13} style={{ color: 'var(--color-warning, #f59e0b)' }} />
+                  <span className="text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
+                    {result.errors.length} satır atlandı
+                  </span>
+                </div>
+                <ul className="space-y-0.5 max-h-28 overflow-y-auto">
+                  {result.errors.map((err, i) => (
+                    <li key={i} className="text-xs" style={{ color: 'var(--color-text-disabled)' }}>
+                      {err}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Delete section */}
+        <div
+          className="rounded-lg p-4 space-y-3"
+          style={{
+            backgroundColor: 'var(--color-surface-elevated)',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          <p className="text-xs font-semibold uppercase tracking-wider" style={{ color: 'var(--color-text-disabled)' }}>
+            Kayıt Silme
+          </p>
+
+          {/* Subject select */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowSubjectSelect((v) => !v)}
+              className="w-full flex items-center justify-between text-sm px-3 py-2 rounded-md border"
+              style={{
+                borderColor: 'var(--color-border)',
+                backgroundColor: 'var(--color-background)',
+                color: deleteSubject ? 'var(--color-text-primary)' : 'var(--color-text-disabled)',
+              }}
+            >
+              <span>{deleteSubject || 'Tüm konular (filtre yok)'}</span>
+              <ChevronDown size={14} />
+            </button>
+            {showSubjectSelect && (
+              <div
+                className="absolute z-10 mt-1 w-full rounded-md border shadow-lg max-h-48 overflow-y-auto"
+                style={{
+                  backgroundColor: 'var(--color-surface-elevated)',
+                  borderColor: 'var(--color-border)',
+                }}
+              >
+                <button
+                  onClick={() => { setDeleteSubject(''); setShowSubjectSelect(false) }}
+                  className="w-full text-left text-sm px-3 py-2 hover:bg-[color-mix(in_srgb,var(--color-primary)_8%,transparent)]"
+                  style={{ color: 'var(--color-text-secondary)' }}
+                >
+                  Tüm konular
+                </button>
+                {subjects.map((s) => (
+                  <button
+                    key={s}
+                    onClick={() => { setDeleteSubject(s); setShowSubjectSelect(false) }}
+                    className="w-full text-left text-sm px-3 py-2 hover:bg-[color-mix(in_srgb,var(--color-primary)_8%,transparent)]"
+                    style={{ color: 'var(--color-text-primary)' }}
+                  >
+                    {s}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={handleDelete}
+            disabled={deleting}
+            className="flex items-center gap-2 text-red-500 border border-red-500/30 hover:bg-red-500/10"
+          >
+            <Trash2 size={14} />
+            {deleteSubject ? `"${deleteSubject}" konusunu sil` : 'Tüm kayıtları sil'}
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
+export default function ContentPage() {
+  const [stats, setStats] = useState<PoolStats | null>(null)
+  const [loadingStats, setLoadingStats] = useState(true)
+
+  const fetchStats = useCallback(async () => {
+    try {
+      const data = await getPoolStats()
+      setStats(data)
+    } catch {
+      // silently fail — admin may not have DB yet
+    } finally {
+      setLoadingStats(false)
     }
   }, [])
 
-  const handleSave = useCallback(() => {
-    const now = new Date()
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ content, savedAt: now.toISOString() }))
-    setSaved(content)
-    setLastSavedAt(now)
-    toast.success('İçerik kaydedildi.')
-  }, [content])
-
-  const handleReset = () => {
-    const confirmed = window.confirm(
-      'Tüm değişiklikler varsayılan değerlere sıfırlanacak. Emin misiniz?'
-    )
-    if (!confirmed) return
-    setContent(DEFAULTS)
-    toast('İçerik varsayılanlara sıfırlandı.', { icon: '↩️' })
-  }
-
   useEffect(() => {
-    function onKeyDown(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
-        e.preventDefault()
-        handleSave()
-      }
-    }
-    window.addEventListener('keydown', onKeyDown)
-    return () => window.removeEventListener('keydown', onKeyDown)
-  }, [handleSave])
-
-  function set<K extends keyof SiteContent>(key: K, value: SiteContent[K]) {
-    setContent((prev) => ({ ...prev, [key]: value }))
-  }
-
-  if (!mounted) return null
+    fetchStats()
+  }, [fetchStats])
 
   return (
     <div className="space-y-6 max-w-screen-xl mx-auto pb-10">
       {/* Header */}
-      <div className="flex items-center justify-between py-4 px-1">
-        <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center justify-between py-4 px-1 flex-wrap gap-3">
+        <div>
           <h1
             className="text-2xl font-bold tracking-tight"
             style={{ color: 'var(--color-text-primary)' }}
           >
-            İçerik Yönetimi
+            İçerik Havuzu
           </h1>
-          {isDirty && (
-            <Badge variant="warning">Kaydedilmemiş değişiklikler</Badge>
-          )}
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+            Soru bankası ve flashcard havuzunu JSON dosyası ile yükleyin.
+          </p>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs hidden sm:block" style={{ color: 'var(--color-text-disabled)' }}>
-            Cmd+S ile kayıt
-          </span>
-          {lastSavedAt && (
-            <span
-              className="text-xs flex items-center gap-1"
-              style={{ color: 'var(--color-text-secondary)' }}
-            >
-              <Clock size={12} />
-              Son kaydedildi: {formatTime(lastSavedAt)}
-            </span>
-          )}
-          <Button variant="ghost" size="sm" onClick={handleReset}>
-            <RotateCcw size={14} />
-            Sıfırla
-          </Button>
-          <Button size="sm" onClick={handleSave}>
-            <Save size={14} />
-            Kaydet
-          </Button>
-        </div>
-      </div>
-
-      {/* Hero Section */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle>Hero Bölümü</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-            {/* Inputs */}
-            <div className="space-y-4">
-              <Input
-                label="Ana Başlık"
-                value={content.heroTitle}
-                onChange={(e) => set('heroTitle', e.target.value)}
-                placeholder="Ana başlık metni"
-              />
-              <Input
-                label="Alt Başlık"
-                value={content.heroSubtitle}
-                onChange={(e) => set('heroSubtitle', e.target.value)}
-                placeholder="Alt başlık metni"
-              />
-              <div className="flex flex-col gap-1.5">
-                <label
-                  className="text-sm font-medium"
-                  style={{ color: 'var(--color-text-primary)' }}
-                >
-                  Açıklama
-                </label>
-                <textarea
-                  rows={4}
-                  value={content.heroDesc}
-                  onChange={(e) => set('heroDesc', e.target.value)}
-                  placeholder="Hero açıklama metni..."
-                  className="w-full rounded-md border px-3 py-2 text-sm resize-none focus:outline-none focus:ring-2"
-                  style={{
-                    borderColor: 'var(--color-border)',
-                    backgroundColor: 'var(--color-background)',
-                    color: 'var(--color-text-primary)',
-                    caretColor: 'var(--color-primary)',
-                  }}
-                  onFocus={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--color-primary)'
-                  }}
-                  onBlur={(e) => {
-                    e.currentTarget.style.borderColor = 'var(--color-border)'
-                  }}
-                />
-              </div>
-            </div>
-
-            {/* Live preview */}
+        {stats && (
+          <div className="flex items-center gap-3 flex-wrap">
             <div
-              className="rounded-xl p-6 flex flex-col justify-center"
+              className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md"
               style={{
-                background:
-                  'linear-gradient(135deg, color-mix(in srgb, var(--color-primary) 8%, transparent), color-mix(in srgb, var(--color-secondary) 8%, transparent))',
+                backgroundColor: 'var(--color-surface-elevated)',
                 border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
               }}
             >
-              <p
-                className="text-[10px] font-semibold uppercase tracking-widest mb-3"
-                style={{ color: 'var(--color-text-disabled)' }}
-              >
-                Canlı Önizleme
-              </p>
-              <h2
-                className="text-xl font-bold leading-tight mb-1"
-                style={{ color: 'var(--color-text-primary)' }}
-              >
-                {content.heroTitle || (
-                  <span style={{ color: 'var(--color-text-disabled)' }}>Ana Başlık...</span>
-                )}
-              </h2>
-              <h3
-                className="text-lg font-semibold mb-3"
-                style={{ color: 'var(--color-primary)' }}
-              >
-                {content.heroSubtitle || (
-                  <span style={{ color: 'var(--color-text-disabled)' }}>Alt Başlık...</span>
-                )}
-              </h3>
-              <p
-                className="text-sm leading-relaxed mb-4"
-                style={{ color: 'var(--color-text-secondary)' }}
-              >
-                {content.heroDesc || (
-                  <span style={{ color: 'var(--color-text-disabled)' }}>Açıklama...</span>
-                )}
-              </p>
-              <button
-                className="self-start text-xs font-semibold px-4 py-2 rounded-md"
-                style={{
-                  backgroundColor: 'var(--color-primary)',
-                  color: '#000',
-                }}
-              >
-                {content.ctaButtonText || 'CTA Butonu'}
-              </button>
+              <BookOpen size={14} style={{ color: 'var(--color-primary)' }} />
+              <span>{stats.questions.toLocaleString('tr-TR')} soru</span>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Stats */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle>İstatistikler</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
-            {(
-              [
-                { valueKey: 'stat1Value', labelKey: 'stat1Label', title: 'İstatistik 1' },
-                { valueKey: 'stat2Value', labelKey: 'stat2Label', title: 'İstatistik 2' },
-                { valueKey: 'stat3Value', labelKey: 'stat3Label', title: 'İstatistik 3' },
-              ] as const
-            ).map(({ valueKey, labelKey, title }) => (
+            <div
+              className="flex items-center gap-2 text-sm px-3 py-1.5 rounded-md"
+              style={{
+                backgroundColor: 'var(--color-surface-elevated)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-secondary)',
+              }}
+            >
+              <Layers size={14} style={{ color: 'var(--color-primary)' }} />
+              <span>{stats.flashcards.toLocaleString('tr-TR')} flashcard</span>
+            </div>
+            {stats.subjects.length > 0 && (
               <div
-                key={valueKey}
-                className="rounded-lg p-4 space-y-3"
+                className="flex items-center gap-1.5 text-xs px-3 py-1.5 rounded-md"
                 style={{
                   backgroundColor: 'var(--color-surface-elevated)',
                   border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-disabled)',
                 }}
               >
-                <p
-                  className="text-xs font-semibold uppercase tracking-wider"
-                  style={{ color: 'var(--color-text-disabled)' }}
-                >
-                  {title}
-                </p>
-                <Input
-                  label="Değer"
-                  value={content[valueKey]}
-                  onChange={(e) => set(valueKey, e.target.value)}
-                  placeholder="örn. 400000"
-                />
-                <Input
-                  label="Etiket"
-                  value={content[labelKey]}
-                  onChange={(e) => set(labelKey, e.target.value)}
-                  placeholder="örn. Klinik Vaka"
-                />
-                <div
-                  className="rounded-md p-3 text-center"
-                  style={{ backgroundColor: 'var(--color-surface)' }}
-                >
-                  <p
-                    className="text-2xl font-bold"
-                    style={{ color: 'var(--color-primary)' }}
-                  >
-                    {content[valueKey] || '—'}
-                  </p>
-                  <p
-                    className="text-xs mt-0.5"
-                    style={{ color: 'var(--color-text-secondary)' }}
-                  >
-                    {content[labelKey] || '—'}
-                  </p>
-                </div>
+                {stats.subjects.length} konu
               </div>
-            ))}
+            )}
           </div>
-        </CardContent>
-      </Card>
+        )}
+        {loadingStats && (
+          <span className="text-xs" style={{ color: 'var(--color-text-disabled)' }}>
+            İstatistikler yükleniyor...
+          </span>
+        )}
+      </div>
 
-      {/* CTA & Buttons */}
+      {/* Two upload cards side by side */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+        <UploadCard
+          type="questions"
+          title="Soru Havuzu"
+          icon={BookOpen}
+          stats={stats}
+          onRefresh={fetchStats}
+        />
+        <UploadCard
+          type="flashcards"
+          title="Flashcard Havuzu"
+          icon={Layers}
+          stats={stats}
+          onRefresh={fetchStats}
+        />
+      </div>
+
+      {/* Format info */}
       <Card variant="bordered">
         <CardHeader>
-          <CardTitle>CTA & Butonlar</CardTitle>
+          <CardTitle>JSON Format Bilgisi</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="CTA Buton Metni"
-              value={content.ctaButtonText}
-              onChange={(e) => set('ctaButtonText', e.target.value)}
-              placeholder="örn. 30 Dakikalık Demo Al"
-            />
-            <Input
-              label="İletişim E-Postası"
-              type="email"
-              value={content.contactEmail}
-              onChange={(e) => set('contactEmail', e.target.value)}
-              placeholder="destek@medasi.com.tr"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* General */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle>Genel</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Input
-              label="Footer Metni"
-              value={content.footerText}
-              onChange={(e) => set('footerText', e.target.value)}
-              placeholder="© 2026. Tüm hakları saklıdır."
-            />
-            <div className="flex flex-col gap-1.5">
-              <label
-                className="text-sm font-medium"
-                style={{ color: 'var(--color-text-primary)' }}
-              >
-                Destek Metni
-              </label>
-              <textarea
-                rows={3}
-                value={content.supportText}
-                onChange={(e) => set('supportText', e.target.value)}
-                placeholder="Kullanıcılara gösterilen destek metni..."
-                className="w-full rounded-md border px-3 py-2 text-sm resize-none focus:outline-none"
+          <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-text-disabled)' }}>
+                Soru Formatı
+              </p>
+              <pre
+                className="text-xs rounded-lg p-4 overflow-x-auto leading-relaxed"
                 style={{
-                  borderColor: 'var(--color-border)',
-                  backgroundColor: 'var(--color-background)',
-                  color: 'var(--color-text-primary)',
+                  backgroundColor: 'var(--color-surface-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-secondary)',
                 }}
-                onFocus={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-primary)'
+              >
+                {JSON.stringify(QUESTION_EXAMPLE, null, 2)}
+              </pre>
+            </div>
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wider mb-2" style={{ color: 'var(--color-text-disabled)' }}>
+                Flashcard Formatı
+              </p>
+              <pre
+                className="text-xs rounded-lg p-4 overflow-x-auto leading-relaxed"
+                style={{
+                  backgroundColor: 'var(--color-surface-elevated)',
+                  border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-secondary)',
                 }}
-                onBlur={(e) => {
-                  e.currentTarget.style.borderColor = 'var(--color-border)'
-                }}
-              />
+              >
+                {JSON.stringify(FLASHCARD_EXAMPLE, null, 2)}
+              </pre>
             </div>
           </div>
         </CardContent>
