@@ -1,4 +1,3 @@
-import { revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
 export interface SystemSettings {
@@ -126,16 +125,11 @@ export const SYSTEM_SETTING_KEYS: readonly SystemSettingKey[] = [
 const SYSTEM_SETTING_KEY_SET = new Set<string>(SYSTEM_SETTING_KEYS);
 const DEFAULT_MODULE_TOGGLES: AdminModuleToggle = {};
 const DEFAULT_ANNOUNCEMENTS: AdminAnnouncement[] = [];
-export const SYSTEM_SETTINGS_CACHE_TAG = "system-settings";
 
-const getCachedSettingMap = unstable_cache(
-  async () => {
-    const rows = await prisma.systemSetting.findMany();
-    return Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  },
-  ["system-settings-map"],
-  { tags: [SYSTEM_SETTINGS_CACHE_TAG] },
-);
+async function getCachedSettingMap() {
+  const rows = await prisma.systemSetting.findMany();
+  return Object.fromEntries(rows.map((row) => [row.key, row.value]));
+}
 
 function parseBoolean(value: unknown, fallback: boolean): boolean {
   if (typeof value !== "string") return fallback;
@@ -607,5 +601,4 @@ export async function upsertSystemSetting(
     update: { value },
     create: { key, value },
   });
-  revalidateTag(SYSTEM_SETTINGS_CACHE_TAG, "max");
 }

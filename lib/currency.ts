@@ -1,5 +1,3 @@
-import { getSystemSettingsFromDb } from "@/lib/system-settings";
-
 const TRY_FORMATTER = new Intl.NumberFormat("tr-TR", {
   style: "currency",
   currency: "TRY",
@@ -32,6 +30,7 @@ export function formatUsd(amountUsd: number, maximumFractionDigits = 4): string 
 }
 
 export async function getCurrencySettings() {
+  const { getSystemSettingsFromDb } = await import("@/lib/system-settings");
   const settings = await getSystemSettingsFromDb();
   return {
     usdTryRate: settings.usdTryRate,
