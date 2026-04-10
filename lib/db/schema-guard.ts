@@ -20,16 +20,18 @@ function oncePerProcess(key: GuardKey, factory: () => Promise<void>): Promise<vo
   return promise;
 }
 
+async function runRawStatements(statements: string[]): Promise<void> {
+  for (const statement of statements) {
+    await prisma.$executeRawUnsafe(statement);
+  }
+}
+
 export async function ensureMaterialsSchema(): Promise<void> {
   return oncePerProcess("materials", async () => {
-    await prisma.$executeRawUnsafe(`
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE EXTENSION IF NOT EXISTS vector;
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS public.user_materials (
+    await runRawStatements([
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `CREATE EXTENSION IF NOT EXISTS vector`,
+      `CREATE TABLE IF NOT EXISTS public.user_materials (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
         name text NOT NULL,
@@ -45,20 +47,18 @@ export async function ensureMaterialsSchema(): Promise<void> {
         error_message text,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
-      );
-      ALTER TABLE public.user_materials
+      )`,
+      `ALTER TABLE public.user_materials
         ADD COLUMN IF NOT EXISTS managed_drive_file_id text,
         ADD COLUMN IF NOT EXISTS managed_drive_processed_file_id text,
-        ADD COLUMN IF NOT EXISTS managed_drive_archive_file_id text;
-      CREATE INDEX IF NOT EXISTS idx_user_materials_user_created_at
-        ON public.user_materials (user_id, created_at DESC);
-      CREATE INDEX IF NOT EXISTS idx_user_materials_user_status
-        ON public.user_materials (user_id, status);
-      CREATE INDEX IF NOT EXISTS idx_user_materials_managed_drive_file
-        ON public.user_materials (managed_drive_file_id);
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS public.user_document_chunks (
+        ADD COLUMN IF NOT EXISTS managed_drive_archive_file_id text`,
+      `CREATE INDEX IF NOT EXISTS idx_user_materials_user_created_at
+        ON public.user_materials (user_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_materials_user_status
+        ON public.user_materials (user_id, status)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_materials_managed_drive_file
+        ON public.user_materials (managed_drive_file_id)`,
+      `CREATE TABLE IF NOT EXISTS public.user_document_chunks (
         id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
         user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
         material_id text NOT NULL REFERENCES public.user_materials(id) ON DELETE CASCADE,
@@ -68,16 +68,14 @@ export async function ensureMaterialsSchema(): Promise<void> {
         embedding vector(768),
         metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
         created_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS idx_user_doc_chunks_user_material
-        ON public.user_document_chunks (user_id, material_id);
-      CREATE INDEX IF NOT EXISTS idx_user_doc_chunks_user_branch
-        ON public.user_document_chunks (user_id, branch);
-      CREATE INDEX IF NOT EXISTS idx_user_doc_chunks_created_at
-        ON public.user_document_chunks (created_at DESC);
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS public.user_drive_workspaces (
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_doc_chunks_user_material
+        ON public.user_document_chunks (user_id, material_id)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_doc_chunks_user_branch
+        ON public.user_document_chunks (user_id, branch)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_doc_chunks_created_at
+        ON public.user_document_chunks (created_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.user_drive_workspaces (
         user_id text PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
         user_folder_id text NOT NULL,
         inbox_folder_id text NOT NULL,
@@ -85,12 +83,10 @@ export async function ensureMaterialsSchema(): Promise<void> {
         archive_folder_id text NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS idx_user_drive_workspaces_user_folder
-        ON public.user_drive_workspaces (user_folder_id);
-    `);
-    await prisma.$executeRawUnsafe(`
-      CREATE TABLE IF NOT EXISTS public.user_material_marks (
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_drive_workspaces_user_folder
+        ON public.user_drive_workspaces (user_folder_id)`,
+      `CREATE TABLE IF NOT EXISTS public.user_material_marks (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
         material_id text NOT NULL REFERENCES public.user_materials(id) ON DELETE CASCADE,
@@ -99,12 +95,10 @@ export async function ensureMaterialsSchema(): Promise<void> {
         note text NOT NULL,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS idx_user_material_marks_user_material
-        ON public.user_material_marks (user_id, material_id, created_at DESC);
-    `);
-    await prisma.$executeRawUnsafe(`
-      DROP FUNCTION IF EXISTS public.insert_user_document_chunk(
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_material_marks_user_material
+        ON public.user_material_marks (user_id, material_id, created_at DESC)`,
+      `DROP FUNCTION IF EXISTS public.insert_user_document_chunk(
         text,
         text,
         text,
@@ -112,7 +106,9 @@ export async function ensureMaterialsSchema(): Promise<void> {
         text,
         vector,
         jsonb
-      );
+      )`,
+    ]);
+    await prisma.$executeRawUnsafe(`
       CREATE OR REPLACE FUNCTION public.insert_user_document_chunk(
         p_user_id text,
         p_material_id text,
@@ -159,9 +155,9 @@ export async function ensureMaterialsSchema(): Promise<void> {
 
 export async function ensureAddonAccessSchema(): Promise<void> {
   return oncePerProcess("addons", async () => {
-    await prisma.$executeRawUnsafe(`
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
-      CREATE TABLE IF NOT EXISTS public.user_addon_access (
+    await runRawStatements([
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `CREATE TABLE IF NOT EXISTS public.user_addon_access (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
         module_key text NOT NULL,
@@ -170,20 +166,20 @@ export async function ensureAddonAccessSchema(): Promise<void> {
         granted_by_user_id text REFERENCES public.users(id) ON DELETE SET NULL,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE UNIQUE INDEX IF NOT EXISTS user_addon_access_user_id_module_key_key
-        ON public.user_addon_access(user_id, module_key);
-      CREATE INDEX IF NOT EXISTS user_addon_access_user_id_expires_at_idx
-        ON public.user_addon_access(user_id, expires_at);
-    `);
+      )`,
+      `CREATE UNIQUE INDEX IF NOT EXISTS user_addon_access_user_id_module_key_key
+        ON public.user_addon_access(user_id, module_key)`,
+      `CREATE INDEX IF NOT EXISTS user_addon_access_user_id_expires_at_idx
+        ON public.user_addon_access(user_id, expires_at)`,
+    ]);
   });
 }
 
 export async function ensureSupportSchema(): Promise<void> {
   return oncePerProcess("support", async () => {
-    await prisma.$executeRawUnsafe(`
-      CREATE EXTENSION IF NOT EXISTS pgcrypto;
-      CREATE TABLE IF NOT EXISTS public.support_tickets (
+    await runRawStatements([
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `CREATE TABLE IF NOT EXISTS public.support_tickets (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
         user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
         subject text NOT NULL,
@@ -194,23 +190,23 @@ export async function ensureSupportSchema(): Promise<void> {
         resolved_at timestamptz,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE TABLE IF NOT EXISTS public.support_ticket_messages (
+      )`,
+      `CREATE TABLE IF NOT EXISTS public.support_ticket_messages (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
         ticket_id text NOT NULL REFERENCES public.support_tickets(id) ON DELETE CASCADE,
         author_user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
         body text NOT NULL,
         is_admin boolean NOT NULL DEFAULT false,
         created_at timestamptz NOT NULL DEFAULT now()
-      );
-      CREATE INDEX IF NOT EXISTS support_tickets_user_id_created_at_idx
-        ON public.support_tickets(user_id, created_at);
-      CREATE INDEX IF NOT EXISTS support_tickets_status_priority_idx
-        ON public.support_tickets(status, priority);
-      CREATE INDEX IF NOT EXISTS support_ticket_messages_ticket_id_created_at_idx
-        ON public.support_ticket_messages(ticket_id, created_at);
-      CREATE INDEX IF NOT EXISTS support_ticket_messages_author_user_id_created_at_idx
-        ON public.support_ticket_messages(author_user_id, created_at);
-    `);
+      )`,
+      `CREATE INDEX IF NOT EXISTS support_tickets_user_id_created_at_idx
+        ON public.support_tickets(user_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS support_tickets_status_priority_idx
+        ON public.support_tickets(status, priority)`,
+      `CREATE INDEX IF NOT EXISTS support_ticket_messages_ticket_id_created_at_idx
+        ON public.support_ticket_messages(ticket_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS support_ticket_messages_author_user_id_created_at_idx
+        ON public.support_ticket_messages(author_user_id, created_at)`,
+    ]);
   });
 }
