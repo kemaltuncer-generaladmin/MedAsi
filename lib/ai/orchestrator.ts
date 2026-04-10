@@ -1,5 +1,5 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { requireGeminiApiKey } from "@/lib/ai/env";
+import { getResolvedGeminiConfig, type GeminiApiModule } from "@/lib/ai/env";
 import { getSettingMap } from "@/lib/system-settings";
 import { AI_LIMITS, clampOutputTokens } from "@/lib/ai/limits";
 
@@ -10,7 +10,7 @@ export type UserResponseLength = "short" | "medium" | "long";
 type AiModelMap = Record<AiModelType, string>;
 
 const MODEL_MAP: AiModelMap = {
-  FAST: "gemini-2.5-flash",
+  FAST: "gemini-2.5-pro",
   EFFICIENT: "gemini-2.5-flash",
 };
 
@@ -55,6 +55,8 @@ export type CentralAiRuntime = {
   settings: CentralAiSettings;
   modelType: AiModelType;
   modelId: string;
+  keyName: string | null;
+  keyModule: GeminiApiModule | null;
   model: ReturnType<ReturnType<typeof createGoogleGenerativeAI>>;
   temperature: number;
   maxOutputTokens: number;
@@ -221,6 +223,14 @@ export function resolveMaxOutputTokens(params: {
   return adjustTokensByLength(baseMax, readUserResponseLength(params.userPrefs));
 }
 
+function resolveModelId(modelType: AiModelType, moduleName?: string) {
+  const normalized = moduleName?.trim().toLowerCase() ?? "";
+  if (normalized === "osce-generate" || normalized === "osce-evaluate") {
+    return "gemini-2.5-pro";
+  }
+  return MODEL_MAP[modelType];
+}
+
 export async function createCentralAiRuntime(params: {
   moduleName?: string;
   requestedModel?: AiModelType;
@@ -235,13 +245,24 @@ export async function createCentralAiRuntime(params: {
     userPrefs: params.userPrefs,
   });
 
-  const modelId = MODEL_MAP[modelType];
-  const google = createGoogleGenerativeAI({ apiKey: requireGeminiApiKey() });
+  const modelId = resolveModelId(modelType, params.moduleName);
+  // Always permit legacy global-key fallback in runtime to avoid module-key misconfiguration outages.
+  const resolvedKey = getResolvedGeminiConfig(params.moduleName, { allowGlobalFallback: true });
+  if (!resolvedKey.apiKey) {
+    throw new Error(
+      `Gemini API key eksik (module=${params.moduleName ?? "general"}). ` +
+      `Beklenen anahtarlar: ${resolvedKey.expectedKeys.join(" / ")}. ` +
+      `Global fallback: ${resolvedKey.fallbackAllowed ? "acik" : "kapali"}.`,
+    );
+  }
+  const google = createGoogleGenerativeAI({ apiKey: resolvedKey.apiKey });
 
   return {
     settings,
     modelType,
     modelId,
+    keyName: resolvedKey.envName,
+    keyModule: resolvedKey.module,
     model: google(modelId),
     temperature: getTemperatureFromPreset(settings.temperaturePreset),
     maxOutputTokens: resolveMaxOutputTokens({

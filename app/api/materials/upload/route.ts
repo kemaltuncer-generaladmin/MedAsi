@@ -44,6 +44,11 @@ function resolveMimeType(ext: string, fallback?: string) {
   }
 }
 
+function isServiceDriveQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /service accounts do not have storage quota/i.test(message);
+}
+
 /**
  * POST /api/materials/upload
  * Multipart form: file, branch?
@@ -80,19 +85,27 @@ export async function POST(req: NextRequest) {
   const arrayBuffer = await file.arrayBuffer();
   const buffer = Buffer.from(arrayBuffer);
   await ensureMaterialsSchema();
-  const handshake = await getManagedDriveHandshakeStatus();
-  if (!handshake.ready) {
-    return NextResponse.json(
-      {
-        error:
-          "Drive handshake başarısız. service_account.json veya Medasi Root erişimi doğrulanamadı.",
-        handshake,
-      },
-      { status: 503 },
-    );
-  }
-  const workspace = await getOrCreateUserDriveWorkspace(user.id);
   const managedPaths = getManagedMaterialPaths(user.id);
+  let workspace: Awaited<ReturnType<typeof getOrCreateUserDriveWorkspace>> | null = null;
+  let sourceUpload: Awaited<ReturnType<typeof uploadBinaryToDriveFolder>> | null = null;
+
+  try {
+    const handshake = await getManagedDriveHandshakeStatus();
+    if (handshake.ready) {
+      workspace = await getOrCreateUserDriveWorkspace(user.id);
+      sourceUpload = await uploadBinaryToDriveFolder({
+        folderId: workspace.inboxFolderId,
+        name: file.name,
+        mimeType: resolveMimeType(ext, file.type),
+        buffer,
+        userEmail: user.email,
+      });
+    }
+  } catch (error) {
+    if (!isServiceDriveQuotaError(error)) {
+      console.error("Managed Drive upload failed; continuing without managed drive:", error);
+    }
+  }
 
   // Tekrar yükleme kontrolü (hem dosya adı hem hash ile)
   const existing = await prisma.$queryRaw<{ id: string; name: string }[]>`
@@ -117,23 +130,15 @@ export async function POST(req: NextRequest) {
       ? `[${normalizedType}] ${baseName}`
       : baseName;
 
-  const sourceUpload = await uploadBinaryToDriveFolder({
-    folderId: workspace.inboxFolderId,
-    name: file.name,
-    mimeType: resolveMimeType(ext, file.type),
-    buffer,
-    userEmail: user.email,
-  });
-
   const materialId = await createMaterial({
     userId: user.id,
     name: persistedName,
     type: ext,
     sizeBytes: file.size,
     source: "upload",
-    driveWebViewLink: sourceUpload.webViewLink ?? undefined,
+    driveWebViewLink: sourceUpload?.webViewLink ?? undefined,
     branch,
-    managedDriveFileId: sourceUpload.fileId,
+    managedDriveFileId: sourceUpload?.fileId,
   });
 
   // Arka planda işle (response hemen dön)
@@ -153,27 +158,29 @@ export async function POST(req: NextRequest) {
         text: result.extractedText ?? "",
       }).catch(() => "Ozet olusturulamadi.");
 
-      const summaryFile = await writeTextFileToDriveFolder({
-        folderId: workspace.processedFolderId,
-        name: `${file.name.replace(/\.[^.]+$/, "")}_ozet.txt`,
-        content: summary,
-        userEmail: user.email,
-      });
-      await moveDriveFileToFolder(sourceUpload.fileId, workspace.archiveFolderId);
-      await updateMaterialDriveArtifacts(materialId, {
-        managedDriveFileId: sourceUpload.fileId,
-        managedDriveProcessedFileId: summaryFile.fileId,
-        managedDriveArchiveFileId: sourceUpload.fileId,
-        driveWebViewLink: sourceUpload.webViewLink,
-      });
+      if (workspace && sourceUpload) {
+        const summaryFile = await writeTextFileToDriveFolder({
+          folderId: workspace.processedFolderId,
+          name: `${file.name.replace(/\.[^.]+$/, "")}_ozet.txt`,
+          content: summary,
+          userEmail: user.email,
+        });
+        await moveDriveFileToFolder(sourceUpload.fileId, workspace.archiveFolderId);
+        await updateMaterialDriveArtifacts(materialId, {
+          managedDriveFileId: sourceUpload.fileId,
+          managedDriveProcessedFileId: summaryFile.fileId,
+          managedDriveArchiveFileId: sourceUpload.fileId,
+          driveWebViewLink: sourceUpload.webViewLink,
+        });
 
-      createSystemLog({
-        level: "info",
-        category: "materials",
-        message: `Materyal işlendi ve arşivlendi: ${file.name}`,
-        details: `User: ${user.id} | Chunks: ${result.chunkCount} | DriveProcessedPath: ${managedPaths.processed} | SummaryFile: ${summaryFile.fileId}`,
-        userId: user.id,
-      }).catch(() => {});
+        createSystemLog({
+          level: "info",
+          category: "materials",
+          message: `Materyal işlendi ve arşivlendi: ${file.name}`,
+          details: `User: ${user.id} | Chunks: ${result.chunkCount} | DriveProcessedPath: ${managedPaths.processed} | SummaryFile: ${summaryFile.fileId}`,
+          userId: user.id,
+        }).catch(() => {});
+      }
     })
     .catch((err) => {
       console.error("Material processing error:", err);

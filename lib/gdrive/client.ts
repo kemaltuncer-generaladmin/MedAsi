@@ -37,6 +37,7 @@ const EXPORT_MAP: Record<string, { mime: string; ext: string }> = {
 
 const MANAGED_ROOT_NAME = "Medasi Root";
 const MANAGED_ROOT_FOLDER_ID = getFirstNonEmptyEnv(["GOOGLE_DRIVE_ROOT_FOLDER_ID"]) || null;
+let userGoogleTokensSchemaReady: Promise<void> | null = null;
 
 export type DriveRequestContext = {
   requestUrl?: string;
@@ -78,6 +79,34 @@ export class DriveIntegrationError extends Error {
     this.reason = reason;
     this.status = status;
   }
+}
+
+async function ensureUserGoogleTokensTable(): Promise<void> {
+  if (!userGoogleTokensSchemaReady) {
+    userGoogleTokensSchemaReady = (async () => {
+      await prisma.$executeRawUnsafe(`CREATE EXTENSION IF NOT EXISTS pgcrypto`);
+      await prisma.$executeRawUnsafe(`
+        CREATE TABLE IF NOT EXISTS public.user_google_tokens (
+          user_id text PRIMARY KEY REFERENCES public.users(id) ON DELETE CASCADE,
+          access_token text NOT NULL,
+          refresh_token text,
+          expires_at timestamptz NOT NULL,
+          scope text,
+          created_at timestamptz NOT NULL DEFAULT now(),
+          updated_at timestamptz NOT NULL DEFAULT now()
+        )
+      `);
+      await prisma.$executeRawUnsafe(`
+        CREATE INDEX IF NOT EXISTS idx_user_google_tokens_expires_at
+        ON public.user_google_tokens (expires_at)
+      `);
+    })().catch((error) => {
+      userGoogleTokensSchemaReady = null;
+      throw error;
+    });
+  }
+
+  await userGoogleTokensSchemaReady;
 }
 
 type DriveFileMeta = {
@@ -441,6 +470,7 @@ export async function saveUserTokens(
   expiresAt: Date,
   scope: string,
 ): Promise<void> {
+  await ensureUserGoogleTokensTable();
   await prisma.$executeRaw`
     INSERT INTO user_google_tokens (user_id, access_token, refresh_token, expires_at, scope, updated_at)
     VALUES (${userId}, ${accessToken}, ${refreshToken}, ${expiresAt}, ${scope}, NOW())
@@ -454,6 +484,7 @@ export async function saveUserTokens(
 }
 
 export async function getValidAccessToken(userId: string): Promise<string | null> {
+  await ensureUserGoogleTokensTable();
   const rows = await prisma.$queryRaw<{
     accessToken: string;
     refreshToken: string | null;
@@ -479,6 +510,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 }
 
 export async function hasDriveConnection(userId: string): Promise<boolean> {
+  await ensureUserGoogleTokensTable();
   const rows = await prisma.$queryRaw<{ user_id: string }[]>`
     SELECT user_id FROM user_google_tokens WHERE user_id = ${userId} LIMIT 1
   `;
@@ -498,6 +530,7 @@ export async function getDriveConnectionStatus(userId: string): Promise<{
 }
 
 export async function revokeDriveConnection(userId: string): Promise<void> {
+  await ensureUserGoogleTokensTable();
   const rows = await prisma.$queryRaw<{ accessToken: string }[]>`
     SELECT access_token AS "accessToken" FROM user_google_tokens WHERE user_id = ${userId} LIMIT 1
   `;

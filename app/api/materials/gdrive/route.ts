@@ -28,6 +28,11 @@ import { generateMaterialSummary } from "@/lib/ai/material-agent";
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
+function isServiceDriveQuotaError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /service accounts do not have storage quota/i.test(message);
+}
+
 /**
  * POST /api/materials/gdrive
  * Body: { fileId: string, fileName?: string, branch?: string }
@@ -67,17 +72,8 @@ export async function POST(req: NextRequest) {
     getDriveConnectionStatus(user.id),
     getValidAccessToken(user.id),
   ]);
-  const handshake = await getManagedDriveHandshakeStatus();
-  if (!handshake.ready) {
-    return NextResponse.json(
-      {
-        error: "Drive servis hesabı hazır değil. service_account ve root erişimini kontrol edin.",
-        reason: "managed_drive_unavailable",
-      },
-      { status: 503 },
-    );
-  }
-  const workspace = await getOrCreateUserDriveWorkspace(user.id);
+  let workspace: Awaited<ReturnType<typeof getOrCreateUserDriveWorkspace>> | null = null;
+  let sourceUpload: Awaited<ReturnType<typeof uploadBinaryToDriveFolder>> | null = null;
   const userDrivePaths = {
     inbox: getManagedUserDrivePlan(user.id, "inbox").folderPath,
     processed: getManagedUserDrivePlan(user.id, "processed").folderPath,
@@ -123,13 +119,23 @@ export async function POST(req: NextRequest) {
   const cleanName = name.replace(/\.[^.]+$/, "");
   const persistedName =
     normalizedType !== "Genel" ? `[${normalizedType}] ${cleanName}` : cleanName;
-  const sourceUpload = await uploadBinaryToDriveFolder({
-    folderId: workspace.inboxFolderId,
-    name,
-    mimeType: fileData.mimeType,
-    buffer: fileData.buffer,
-    userEmail: user.email,
-  });
+  try {
+    const handshake = await getManagedDriveHandshakeStatus();
+    if (handshake.ready) {
+      workspace = await getOrCreateUserDriveWorkspace(user.id);
+      sourceUpload = await uploadBinaryToDriveFolder({
+        folderId: workspace.inboxFolderId,
+        name,
+        mimeType: fileData.mimeType,
+        buffer: fileData.buffer,
+        userEmail: user.email,
+      });
+    }
+  } catch (error) {
+    if (!isServiceDriveQuotaError(error)) {
+      console.error("Managed Drive import failed; continuing without managed drive:", error);
+    }
+  }
 
   const materialId = await createMaterial({
     userId: user.id,
@@ -138,9 +144,9 @@ export async function POST(req: NextRequest) {
     sizeBytes: fileData.size,
     source: "gdrive",
     driveFileId: body.fileId,
-    driveWebViewLink: sourceUpload.webViewLink ?? fileData.webViewLink,
+    driveWebViewLink: sourceUpload?.webViewLink ?? fileData.webViewLink,
     branch,
-    managedDriveFileId: sourceUpload.fileId,
+    managedDriveFileId: sourceUpload?.fileId,
   });
 
   // Arka planda işle
@@ -152,27 +158,29 @@ export async function POST(req: NextRequest) {
         text: result.extractedText ?? "",
       }).catch(() => "Ozet olusturulamadi.");
 
-      const summaryFile = await writeTextFileToDriveFolder({
-        folderId: workspace.processedFolderId,
-        name: `${cleanName}_ozet.txt`,
-        content: summary,
-        userEmail: user.email,
-      });
-      await moveDriveFileToFolder(sourceUpload.fileId, workspace.archiveFolderId);
-      await updateMaterialDriveArtifacts(materialId, {
-        managedDriveFileId: sourceUpload.fileId,
-        managedDriveProcessedFileId: summaryFile.fileId,
-        managedDriveArchiveFileId: sourceUpload.fileId,
-        driveWebViewLink: sourceUpload.webViewLink ?? fileData.webViewLink,
-      });
+      if (workspace && sourceUpload) {
+        const summaryFile = await writeTextFileToDriveFolder({
+          folderId: workspace.processedFolderId,
+          name: `${cleanName}_ozet.txt`,
+          content: summary,
+          userEmail: user.email,
+        });
+        await moveDriveFileToFolder(sourceUpload.fileId, workspace.archiveFolderId);
+        await updateMaterialDriveArtifacts(materialId, {
+          managedDriveFileId: sourceUpload.fileId,
+          managedDriveProcessedFileId: summaryFile.fileId,
+          managedDriveArchiveFileId: sourceUpload.fileId,
+          driveWebViewLink: sourceUpload.webViewLink ?? fileData.webViewLink,
+        });
 
-      createSystemLog({
-        level: "info",
-        category: "materials",
-        message: `Drive materyali işlendi: ${cleanName}`,
-        details: `User: ${user.id} | SourceFileId: ${body.fileId} | ManagedFile: ${sourceUpload.fileId} | Chunks: ${result.chunkCount} | DriveProcessedPath: ${userDrivePaths.processed}`,
-        userId: user.id,
-      }).catch(() => {});
+        createSystemLog({
+          level: "info",
+          category: "materials",
+          message: `Drive materyali işlendi: ${cleanName}`,
+          details: `User: ${user.id} | SourceFileId: ${body.fileId} | ManagedFile: ${sourceUpload.fileId} | Chunks: ${result.chunkCount} | DriveProcessedPath: ${userDrivePaths.processed}`,
+          userId: user.id,
+        }).catch(() => {});
+      }
     })
     .catch(console.error);
 
