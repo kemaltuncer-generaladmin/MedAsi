@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createAdminClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithRole } from "@/lib/auth/current-user-role";
@@ -31,7 +31,7 @@ export async function getUsers() {
 
 export async function updateUserRole(userId: string, role: string) {
   await checkAdmin();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase.auth.admin.updateUserById(userId, {
     user_metadata: { role },
   });
@@ -309,4 +309,279 @@ export async function deletePoolItems(
     revalidatePath("/admin/content");
     return { deleted: result.count };
   }
+}
+
+// ─── Pool Browse / Management Actions ────────────────────────────────────────
+
+export async function getPoolQuestions(filters: {
+  subject?: string;
+  difficulty?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{
+  items: {
+    id: string;
+    subject: string;
+    difficulty: string | null;
+    questionText: string;
+    options: unknown;
+    correctAnswer: string;
+    explanation: string | null;
+    tags: unknown;
+    source: string | null;
+    isActive: boolean;
+    createdAt: Date;
+  }[];
+  total: number;
+}> {
+  await checkAdmin();
+  const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? 20;
+  const skip = (page - 1) * pageSize;
+
+  const where: Record<string, unknown> = {};
+  if (filters.subject) where.subject = filters.subject;
+  if (filters.difficulty) where.difficulty = filters.difficulty;
+  if (filters.search) {
+    where.questionText = { contains: filters.search, mode: "insensitive" };
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.poolQuestion.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: pageSize,
+    }),
+    prisma.poolQuestion.count({ where }),
+  ]);
+
+  return { items, total };
+}
+
+export async function getPoolFlashcards(filters: {
+  subject?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<{
+  items: {
+    id: string;
+    subject: string;
+    front: string;
+    back: string;
+    tags: unknown;
+    source: string | null;
+    isActive: boolean;
+    createdAt: Date;
+  }[];
+  total: number;
+}> {
+  await checkAdmin();
+  const page = filters.page ?? 1;
+  const pageSize = filters.pageSize ?? 20;
+  const skip = (page - 1) * pageSize;
+
+  const where: Record<string, unknown> = {};
+  if (filters.subject) where.subject = filters.subject;
+  if (filters.search) {
+    where.front = { contains: filters.search, mode: "insensitive" };
+  }
+
+  const [items, total] = await Promise.all([
+    prisma.poolFlashcard.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take: pageSize,
+    }),
+    prisma.poolFlashcard.count({ where }),
+  ]);
+
+  return { items, total };
+}
+
+export async function deletePoolQuestion(id: string): Promise<void> {
+  await checkAdmin();
+  await prisma.poolQuestion.delete({ where: { id } });
+  revalidatePath("/admin/content");
+}
+
+export async function deletePoolFlashcard(id: string): Promise<void> {
+  await checkAdmin();
+  await prisma.poolFlashcard.delete({ where: { id } });
+  revalidatePath("/admin/content");
+}
+
+export async function bulkDeletePoolQuestions(ids: string[]): Promise<void> {
+  await checkAdmin();
+  await prisma.poolQuestion.deleteMany({ where: { id: { in: ids } } });
+  revalidatePath("/admin/content");
+}
+
+export async function bulkDeletePoolFlashcards(ids: string[]): Promise<void> {
+  await checkAdmin();
+  await prisma.poolFlashcard.deleteMany({ where: { id: { in: ids } } });
+  revalidatePath("/admin/content");
+}
+
+export async function getPoolBatches(): Promise<
+  {
+    source: string;
+    questionCount: number;
+    flashcardCount: number;
+    createdAt: Date;
+  }[]
+> {
+  await checkAdmin();
+
+  // Get distinct sources from questions and flashcards
+  const [qSources, fSources] = await Promise.all([
+    prisma.poolQuestion.groupBy({
+      by: ["source"],
+      _count: { id: true },
+      _min: { createdAt: true },
+      where: { source: { not: null } },
+    }),
+    prisma.poolFlashcard.groupBy({
+      by: ["source"],
+      _count: { id: true },
+      _min: { createdAt: true },
+      where: { source: { not: null } },
+    }),
+  ]);
+
+  // Merge by source
+  const sourceMap = new Map<
+    string,
+    { questionCount: number; flashcardCount: number; createdAt: Date }
+  >();
+
+  for (const row of qSources) {
+    if (!row.source) continue;
+    const existing = sourceMap.get(row.source) ?? {
+      questionCount: 0,
+      flashcardCount: 0,
+      createdAt: row._min.createdAt ?? new Date(),
+    };
+    existing.questionCount += row._count.id;
+    sourceMap.set(row.source, existing);
+  }
+
+  for (const row of fSources) {
+    if (!row.source) continue;
+    const existing = sourceMap.get(row.source) ?? {
+      questionCount: 0,
+      flashcardCount: 0,
+      createdAt: row._min.createdAt ?? new Date(),
+    };
+    existing.flashcardCount += row._count.id;
+    sourceMap.set(row.source, existing);
+  }
+
+  return Array.from(sourceMap.entries())
+    .map(([source, data]) => ({ source, ...data }))
+    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+}
+
+export async function deletePoolBatch(source: string): Promise<void> {
+  await checkAdmin();
+  await Promise.all([
+    prisma.poolQuestion.deleteMany({ where: { source } }),
+    prisma.poolFlashcard.deleteMany({ where: { source } }),
+  ]);
+  revalidatePath("/admin/content");
+}
+
+export async function deleteUser(userId: string) {
+  await checkAdmin();
+  return await deleteUserInternal(userId);
+}
+
+export async function deleteUserInternal(userId: string) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true, name: true } });
+  if (!user) throw new Error('Kullanıcı bulunamadı');
+
+  const orgAdminCount = await prisma.researchOrganization.count({ where: { adminUserId: userId } });
+  if (orgAdminCount > 0) {
+    throw new Error('Kullanıcı bir organizasyonun yöneticisi olarak atanmış. Lütfen önce yönetici atamasını değiştirin.');
+  }
+
+  // Audit: log start
+  await prisma.systemLog.create({
+    data: {
+      level: 'info',
+      category: 'admin.user_delete',
+      message: `Başlatılıyor: Kullanıcı silme ${userId}`,
+      details: JSON.stringify({ userId, email: user.email, name: user.name }),
+    },
+  });
+
+  try {
+    await prisma.$transaction([
+      prisma.orgAiUsage.deleteMany({ where: { userId } }),
+      prisma.orgMember.deleteMany({ where: { userId } }),
+      prisma.studySession.deleteMany({ where: { userId } }),
+      prisma.tokenTransaction.deleteMany({ where: { userId } }),
+      prisma.tokenWallet.deleteMany({ where: { userId } }),
+      prisma.studentLearningProfile.deleteMany({ where: { userId } }),
+      prisma.dashboardPreferences.deleteMany({ where: { userId } }),
+      prisma.questionAttempt.deleteMany({ where: { userId } }),
+      prisma.pomodoroLog.deleteMany({ where: { userId } }),
+      prisma.note.deleteMany({ where: { userId } }),
+      prisma.session.deleteMany({ where: { userId } }),
+      prisma.case.deleteMany({ where: { userId } }),
+      prisma.patient.deleteMany({ where: { userId } }),
+      prisma.userModule.deleteMany({ where: { userId } }),
+      prisma.user.delete({ where: { id: userId } }),
+    ]);
+  } catch (err) {
+    await prisma.systemLog.create({
+      data: {
+        level: 'error',
+        category: 'admin.user_delete',
+        message: `Hata: Kullanıcı verileri silinirken hata ${userId}`,
+        details: String(err),
+      },
+    });
+    throw new Error(`Kullanıcı verileri silinirken hata oluştu: ${String(err)}`);
+  }
+
+  try {
+    const supabase = createAdminClient();
+    const { error } = await supabase.auth.admin.deleteUser(userId);
+    if (error) {
+      await prisma.systemLog.create({
+        data: {
+          level: 'error',
+          category: 'admin.user_delete',
+          message: `Hata: Supabase auth silinemedi ${userId}`,
+          details: error.message,
+        },
+      });
+      throw new Error(`Supabase auth silinemedi: ${error.message}`);
+    }
+  } catch (err) {
+    await prisma.systemLog.create({
+      data: {
+        level: 'error',
+        category: 'admin.user_delete',
+        message: `Hata: Auth silinirken hata ${userId}`,
+        details: String(err),
+      },
+    });
+    throw new Error(`Auth silinirken hata: ${String(err)}`);
+  }
+
+  await prisma.systemLog.create({
+    data: {
+      level: 'info',
+      category: 'admin.user_delete',
+      message: `Tamamlandı: Kullanıcı silindi ${userId}`,
+      details: JSON.stringify({ userId, email: user.email, name: user.name }),
+    },
+  });
+
+  revalidatePath('/admin/users');
 }

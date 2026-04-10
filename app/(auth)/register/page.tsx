@@ -27,7 +27,8 @@ export default function RegisterPage() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [password, setPassword] = useState("");
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [medicalDataConsentAccepted, setMedicalDataConsentAccepted] = useState(false);
   const [isPending, startTransition] = useTransition();
   const [couponCode, setCouponCode] = useState("");
   const [couponState, setCouponState] = useState<CouponValidationResult | null>(null);
@@ -416,19 +417,47 @@ export default function RegisterPage() {
         <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
           <input
             type="checkbox"
+            name="termsAccepted"
             required
-            checked={termsAccepted}
-            onChange={(e) => setTermsAccepted(e.target.checked)}
+            checked={legalAccepted}
+            onChange={(e) => setLegalAccepted(e.target.checked)}
             className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[#1E1E2E] bg-[var(--color-background)] accent-[var(--color-primary)]"
           />
           <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-            Kullanım şartlarını ve gizlilik politikasını kabul ediyorum
+            <input type="hidden" name="privacyAccepted" value={legalAccepted ? "true" : "false"} />
+            <Link href="/terms" className="text-[var(--color-primary)] hover:opacity-80">
+              Kullanım Şartları
+            </Link>
+            {" ve "}
+            <Link href="/privacy" className="text-[var(--color-primary)] hover:opacity-80">
+              Gizlilik/KVKK
+            </Link>
+            {" metinlerini okudum ve kabul ediyorum."}
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            name="medicalDataConsentAccepted"
+            required
+            checked={medicalDataConsentAccepted}
+            onChange={(e) => setMedicalDataConsentAccepted(e.target.checked)}
+            className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[#1E1E2E] bg-[var(--color-background)] accent-[var(--color-primary)]"
+          />
+          <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+            Hasta/sağlık verisi gibi özel nitelikli verileri yalnızca yetkili kullanım amacıyla işleyeceğimi, platformun eğitim amaçlı olduğunu ve klinik karar sorumluluğunun kullanıcıda olduğunu kabul ediyorum.
           </span>
         </label>
 
         <Button
           type="submit"
-          disabled={isPending || !passwordsMatch || !termsAccepted}
+          disabled={
+            isPending ||
+            !passwordsMatch ||
+            !legalAccepted ||
+            !medicalDataConsentAccepted
+          }
           className="h-11 w-full rounded-[4px] border-0 bg-[var(--color-primary)] text-sm font-semibold text-[#020617] hover:-translate-y-0.5 hover:bg-[var(--color-primary-hover)]"
         >
           {isPending ? (

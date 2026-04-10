@@ -1,21 +1,242 @@
-import { Resend } from 'resend'
+import { Resend } from "resend";
+import nodemailer from "nodemailer";
+import { buildVerificationTemplate } from "./templates/verification";
+import { buildPasswordResetTemplate } from "./templates/password-reset";
 
-const resend = new Resend(process.env.RESEND_API_KEY!)
+type VerificationEmailParams = {
+  to: string;
+  name?: string | null;
+  verificationLink: string;
+  verificationCode?: string | null;
+};
+
+function getEmailProvider() {
+  return process.env.EMAIL_PROVIDER || "resend"; // "resend" | "smtp"
+}
+
+function getResendClient() {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    throw new Error("RESEND_API_KEY is not configured");
+  }
+  return new Resend(apiKey);
+}
+
+function getSmtpTransporter() {
+  const host = process.env.SMTP_HOST;
+  const port = parseInt(process.env.SMTP_PORT || "587");
+  const secure = process.env.SMTP_SECURE === "true";
+  const user = process.env.SMTP_USER;
+  const pass = process.env.SMTP_PASS;
+
+  if (!host || !user || !pass) {
+    throw new Error("SMTP configuration incomplete. Required: SMTP_HOST, SMTP_USER, SMTP_PASS");
+  }
+
+  return nodemailer.createTransport({
+    host,
+    port,
+    secure,
+    auth: {
+      user,
+      pass,
+    },
+    // Debug için
+    debug: process.env.NODE_ENV === "development",
+    logger: process.env.NODE_ENV === "development",
+  });
+}
+
+function getFromEmail() {
+  const from = process.env.RESEND_FROM_EMAIL || process.env.EMAIL_FROM;
+  if (!from) {
+    throw new Error("RESEND_FROM_EMAIL / EMAIL_FROM is not configured");
+  }
+  return from;
+}
+
+function getFromName() {
+  return process.env.EMAIL_FROM_NAME || "MedAsi";
+}
+
+function getSiteUrl() {
+  return (
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000"
+  ).replace(/\/$/, "");
+}
+
+function getSupportEmail() {
+  return process.env.SUPPORT_EMAIL || "support@medasi.com";
+}
+
+function buildFromHeader() {
+  const fromName = getFromName();
+  const fromEmail = getFromEmail();
+  return `${fromName} <${fromEmail}>`;
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function buildShell(params: {
+  title: string;
+  subtitle?: string;
+  bodyHtml: string;
+  footerNote?: string;
+}) {
+  const year = new Date().getFullYear();
+  const site = getSiteUrl();
+  return `<!doctype html>
+<html lang="tr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>${escapeHtml(params.title)}</title>
+  </head>
+  <body style="margin:0;padding:0;background:#0a0e27;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','Helvetica Neue',Arial,sans-serif;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#0a0e27;padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background:#111827;border:1px solid #1f2937;border-radius:10px;overflow:hidden;">
+            <tr>
+              <td style="padding:36px 24px;background:linear-gradient(135deg,#0f172a 0%,#1e293b 100%);border-bottom:1px solid #1f2937;text-align:center;">
+                <div style="font-size:30px;font-weight:800;letter-spacing:-0.5px;color:#06b6d4;">MedAsi</div>
+                <div style="margin-top:10px;color:#f1f5f9;font-size:22px;font-weight:700;">${escapeHtml(params.title)}</div>
+                ${params.subtitle ? `<div style="margin-top:8px;color:#94a3b8;font-size:12px;letter-spacing:.5px;text-transform:uppercase;">${escapeHtml(params.subtitle)}</div>` : ""}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:30px 24px;color:#cbd5e1;font-size:14px;line-height:1.75;">
+                ${params.bodyHtml}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:20px 24px;background:#0f172a;border-top:1px solid #1f2937;color:#94a3b8;font-size:12px;line-height:1.6;text-align:center;">
+                ${params.footerNote ? `<div style="margin-bottom:8px;color:#cbd5e1;">${escapeHtml(params.footerNote)}</div>` : ""}
+                <div style="margin-bottom:8px;">Yardıma ihtiyacın olursa <a href="mailto:${escapeHtml(getSupportEmail())}" style="color:#06b6d4;text-decoration:none;">${escapeHtml(getSupportEmail())}</a></div>
+                <div>
+                  <a href="${site}/privacy" style="color:#64748b;text-decoration:none;">Gizlilik</a>
+                  <span style="color:#334155;"> · </span>
+                  <a href="${site}/terms" style="color:#64748b;text-decoration:none;">Koşullar</a>
+                </div>
+                <div style="margin-top:10px;color:#64748b;">© ${year} MedAsi</div>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
+}
+
+export async function sendVerificationEmail({
+  to,
+  name,
+  verificationLink,
+  verificationCode,
+}: VerificationEmailParams) {
+  const provider = getEmailProvider();
+  const html = buildVerificationTemplate({
+    name,
+    verificationLink,
+    verificationCode,
+    fromName: getFromName(),
+    supportEmail: getSupportEmail(),
+    siteUrl: getSiteUrl(),
+  });
+
+  if (provider === "smtp") {
+    const transporter = getSmtpTransporter();
+    return transporter.sendMail({
+      from: buildFromHeader(),
+      to,
+      subject: "E-posta Adresini Onayla - MedAsi",
+      replyTo: getSupportEmail(),
+      html,
+    });
+  } else {
+    // Default to Resend
+    const resend = getResendClient();
+    return resend.emails.send({
+      from: buildFromHeader(),
+      to,
+      subject: "E-posta Adresini Onayla - MedAsi",
+      reply_to: getSupportEmail(),
+      html,
+    });
+  }
+}
 
 export async function sendWelcomeEmail(to: string, name: string) {
-  return resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
-    to,
-    subject: 'Medasi\'ye Hoş Geldin',
-    html: `<p>Merhaba <strong>${name}</strong>, Medasi'ye hoş geldin!</p>`,
-  })
+  const provider = getEmailProvider();
+  const html = buildShell({
+    title: "MedAsi'ye Hoş Geldin",
+    subtitle: "Tıbbi Yapay Zeka Platformu",
+    bodyHtml: `
+      <p style="margin:0 0 14px 0;color:#f1f5f9;">Merhaba <strong style="color:#06b6d4;">${escapeHtml(name)}</strong>,</p>
+      <p style="margin:0 0 14px 0;">MedAsi hesabın başarıyla oluşturuldu. Klinik ve öğrenme modüllerini hemen kullanmaya başlayabilirsin.</p>
+      <div style="text-align:center;margin:22px 0;">
+        <a href="${getSiteUrl()}/dashboard" style="display:inline-block;padding:12px 30px;border-radius:7px;background:linear-gradient(135deg,#06b6d4 0%,#0891b2 100%);color:#04131f;text-decoration:none;font-weight:800;font-size:14px;">Panele Git</a>
+      </div>
+    `,
+  });
+
+  if (provider === "smtp") {
+    const transporter = getSmtpTransporter();
+    return transporter.sendMail({
+      from: buildFromHeader(),
+      to,
+      subject: "MedAsi'ye Hoş Geldin",
+      replyTo: getSupportEmail(),
+      html,
+    });
+  } else {
+    const resend = getResendClient();
+    return resend.emails.send({
+      from: buildFromHeader(),
+      to,
+      subject: "MedAsi'ye Hoş Geldin",
+      reply_to: getSupportEmail(),
+      html,
+    });
+  }
 }
 
 export async function sendPasswordResetEmail(to: string, resetUrl: string) {
-  return resend.emails.send({
-    from: process.env.RESEND_FROM_EMAIL!,
-    to,
-    subject: 'Şifre Sıfırlama',
-    html: `<p>Şifreni sıfırlamak için <a href="${resetUrl}">tıkla</a>.</p>`,
-  })
+  const provider = getEmailProvider();
+  const html = buildPasswordResetTemplate({
+    resetUrl,
+    fromName: getFromName(),
+    supportEmail: getSupportEmail(),
+    siteUrl: getSiteUrl(),
+  });
+
+  if (provider === "smtp") {
+    const transporter = getSmtpTransporter();
+    return transporter.sendMail({
+      from: buildFromHeader(),
+      to,
+      subject: "Şifre Sıfırlama - MedAsi",
+      replyTo: getSupportEmail(),
+      html,
+    });
+  } else {
+    const resend = getResendClient();
+    return resend.emails.send({
+      from: buildFromHeader(),
+      to,
+      subject: "Şifre Sıfırlama - MedAsi",
+      reply_to: getSupportEmail(),
+      html,
+    });
+  }
 }

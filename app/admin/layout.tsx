@@ -6,7 +6,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <div className="min-h-screen" style={{ backgroundColor: 'var(--color-background)' }}>
       <div className="flex">
         <AdminSidebar />
-        <div className="flex-1">
+
+        <div className="flex-1 min-w-0">
           {/* Header */}
           <header
             className="h-16 flex items-center justify-between px-6 sticky top-0 z-40"
@@ -15,20 +16,37 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
               borderBottom: '1px solid var(--color-border)',
             }}
           >
-            <div className="flex items-center gap-3">
-              <ShieldCheck size={22} style={{ color: 'var(--color-primary)' }} />
+            <div className="flex flex-col">
               <span
-                className="text-lg font-bold"
+                className="text-sm font-semibold"
                 style={{ color: 'var(--color-text-primary)' }}
               >
-                MED<span style={{ color: 'var(--color-primary)' }}>ASI</span>{' '}
-                <span
-                  className="font-normal text-sm ml-1"
-                  style={{ color: 'var(--color-text-secondary)' }}
-                >
-                  Admin Panel
-                </span>
+                Admin Panel
               </span>
+              <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                Platform yönetimi ve yapılandırma
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <div
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+                style={{
+                  backgroundColor: 'color-mix(in srgb, var(--color-primary) 8%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--color-primary) 20%, transparent)',
+                }}
+              >
+                <ShieldCheck
+                  size={14}
+                  style={{ color: 'var(--color-primary)', flexShrink: 0 }}
+                />
+                <span
+                  className="text-xs font-semibold"
+                  style={{ color: 'var(--color-primary)' }}
+                >
+                  Admin
+                </span>
+              </div>
             </div>
           </header>
 

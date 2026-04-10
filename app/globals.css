@@ -1,5 +1,136 @@
-@import '../styles/tokens.css';
+@import "../styles/tokens.css";
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* ─── Skip to content (erişilebilirlik) ────────────────────────────────── */
+.skip-to-content {
+  position: absolute;
+  top: -100%;
+  left: 1rem;
+  z-index: 9999;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary, #00C4EB);
+  color: #0a0a0c;
+  font-weight: 600;
+  font-size: 0.875rem;
+  border-radius: 0 0 6px 6px;
+  text-decoration: none;
+  transition: top 0.15s;
+}
+.skip-to-content:focus {
+  top: 0;
+}
+
+/* ─── Güçlü focus-visible halkası (WCAG 2.4.11) ─────────────────────────── */
+:focus-visible {
+  outline: 2px solid var(--color-primary, #00C4EB);
+  outline-offset: 3px;
+  border-radius: 3px;
+}
+/* Fare ile tıklamada görünmesin */
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ─── prefers-reduced-motion: tüm animasyonları kapat ──────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+@layer utilities {
+  .medasi-ekg {
+    position: relative;
+    width: 84px;
+    height: 20px;
+    overflow: hidden;
+  }
+
+  .medasi-ekg span {
+    position: absolute;
+    inset: 0;
+    background:
+      linear-gradient(
+        90deg,
+        transparent 0%,
+        transparent 10%,
+        currentColor 12%,
+        currentColor 18%,
+        transparent 19%,
+        transparent 30%,
+        currentColor 33%,
+        currentColor 35%,
+        transparent 36%,
+        transparent 48%,
+        currentColor 50%,
+        currentColor 52%,
+        transparent 53%,
+        transparent 100%
+      );
+    color: var(--color-primary);
+    transform: translateX(-100%);
+    animation: medasi-ekg-wave 1.4s linear infinite;
+    opacity: 0.9;
+  }
+
+  .medasi-shimmer-line {
+    height: 12px;
+    border-radius: 999px;
+    background: linear-gradient(
+      90deg,
+      color-mix(in srgb, var(--color-surface) 92%, transparent) 0%,
+      color-mix(in srgb, var(--color-primary) 12%, var(--color-surface)) 50%,
+      color-mix(in srgb, var(--color-surface) 92%, transparent) 100%
+    );
+    background-size: 200% 100%;
+    animation: medasi-shimmer 1.5s linear infinite;
+  }
+
+  /* SVG EKG path animation */
+  .medasi-ekg-svg {
+    stroke-dasharray: 220;
+    stroke-dashoffset: 220;
+    animation: medasi-ekg-svg-draw 1.8s ease-in-out infinite;
+  }
+
+  .medasi-input-shell:focus-within {
+    border-color: color-mix(in srgb, var(--color-primary) 60%, transparent) !important;
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent),
+      0 0 32px color-mix(in srgb, var(--color-primary) 18%, transparent);
+  }
+}
+
+@keyframes medasi-ekg-wave {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(120%);
+  }
+}
+
+@keyframes medasi-ekg-svg-draw {
+  0% { stroke-dashoffset: 220; opacity: 0.4; }
+  25% { opacity: 1; }
+  75% { stroke-dashoffset: 0; opacity: 1; }
+  90% { stroke-dashoffset: -40; opacity: 0.3; }
+  100% { stroke-dashoffset: -40; opacity: 0; }
+}
+
+@keyframes medasi-shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}

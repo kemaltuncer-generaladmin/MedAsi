@@ -1,30 +1,25 @@
 import { redirect } from "next/navigation";
-import { createClient } from "@/lib/supabase/server";
 import { DashboardShell, Sidebar, Topbar, AnnouncementBanner } from "@/components/layout";
-import { ROUTES } from "@/constants";
+import { PACKAGES, ROUTES } from "@/constants";
+import type { Package as UserPackage } from "@/types";
 import type { ReactNode } from "react";
-import { prisma } from "@/lib/prisma";
-import { getSystemSettingsFromDb, getAnnouncementsFromDb } from "@/lib/system-settings";
+import { getPublicSystemConfigFromDb } from "@/lib/system-settings";
+import { normalizePackageName } from "@/lib/access/package-access";
+import { getCurrentUserContext } from "@/lib/auth/current-user-role";
 
 export default async function DashboardLayout({
   children,
 }: {
   children: ReactNode;
 }) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const [{ user, role, dbUser }, publicConfig] = await Promise.all([
+    getCurrentUserContext(),
+    getPublicSystemConfigFromDb(),
+  ]);
 
   if (!user) redirect(ROUTES.login);
 
-  const [settings, allAnnouncements] = await Promise.all([
-    getSystemSettingsFromDb(),
-    getAnnouncementsFromDb(),
-  ]);
-  const activeAnnouncements = allAnnouncements.filter((a) => a.active);
-  const role = user.user_metadata?.role as string | undefined;
-  if (settings.maintenanceMode && role !== "admin") {
+  if (publicConfig.maintenanceMode && role !== "admin") {
     return (
       <div className="min-h-screen flex items-center justify-center p-8">
         <div
@@ -41,7 +36,7 @@ export default async function DashboardLayout({
             Sistem Bakımda
           </h1>
           <p style={{ color: "var(--color-text-secondary)" }}>
-            {settings.maintenanceMessage}
+            {publicConfig.maintenanceMessage}
           </p>
         </div>
       </div>
@@ -49,48 +44,52 @@ export default async function DashboardLayout({
   }
 
   let packageName: string | null = null;
-  let dbUserData: {
-    id: string;
-    role: string;
-    packageId: string | null;
-    createdAt: Date;
-    package: { id: string; name: string; dailyAiLimit: number; price: number } | null;
-  } | null = null;
+  let dbUserData = dbUser;
 
   if (role !== "admin" && role !== "org_admin") {
-    const dbUser = await prisma.user.findUnique({
-      where: { id: user.id },
-      select: {
-        id: true,
-        role: true,
-        packageId: true,
-        createdAt: true,
-        onboardingCompleted: true,
-        package: { select: { id: true, name: true, dailyAiLimit: true, price: true } },
-      },
-    });
-
-    if (!dbUser?.onboardingCompleted) {
+    if (!dbUserData?.onboardingCompleted) {
       redirect("/setup");
     }
 
-    packageName = dbUser?.package?.name ?? null;
-    dbUserData = dbUser ?? null;
+    packageName = dbUserData?.package?.name ?? null;
   }
+
+  const normalizedPackageName = normalizePackageName(dbUserData?.package?.name);
+  const resolvedPackageName =
+    normalizedPackageName === "unknown" ? "ucretsiz" : normalizedPackageName;
+  const fallbackPackageMeta = PACKAGES[resolvedPackageName];
+  const userName =
+    typeof user.user_metadata?.name === "string" ? user.user_metadata.name : null;
+  const resolvedPackage: UserPackage = dbUserData?.package
+    ? {
+        ...dbUserData.package,
+        name: dbUserData.package.name,
+      }
+    : {
+        id: "",
+        name: resolvedPackageName,
+        dailyAiLimit: fallbackPackageMeta.dailyAiLimit,
+        price: fallbackPackageMeta.price,
+      };
 
   return (
     <DashboardShell
-      sidebar={<Sidebar packageName={packageName} />}
-      banner={<AnnouncementBanner announcements={activeAnnouncements} />}
+      sidebar={
+        <Sidebar
+          packageName={packageName}
+          moduleToggles={publicConfig.moduleToggles}
+        />
+      }
+      banner={<AnnouncementBanner announcements={publicConfig.announcements} />}
       topbar={
         <Topbar
           user={{
             id: user.id,
             email: user.email ?? "",
-            name: user.user_metadata?.name ?? null,
+            name: userName,
             role: (dbUserData?.role ?? role ?? "user") as "user" | "admin",
             packageId: dbUserData?.packageId ?? "",
-            package: dbUserData?.package ?? { id: "", name: "student", dailyAiLimit: 10, price: 0 },
+            package: resolvedPackage,
             createdAt: dbUserData?.createdAt?.toISOString() ?? "",
           }}
         />

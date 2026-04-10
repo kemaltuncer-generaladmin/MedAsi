@@ -19,23 +19,13 @@ import {
   EyeOff,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { TUS_SUBJECTS_WITH_OTHER, type TusSubjectOrOther } from "@/constants/tus";
 
 const STORAGE_KEY = "medasi_soru_bankasi_v1";
 const WRONG_KEY = "medasi_hatali_sorular_v1";
 
 type Difficulty = "Kolay" | "Orta" | "Zor";
-type Subject =
-  | "Anatomi"
-  | "Fizyoloji"
-  | "Farmakoloji"
-  | "Patoloji"
-  | "Dahiliye"
-  | "Cerrahi"
-  | "Pediatri"
-  | "Kardiyoloji"
-  | "Nöroloji"
-  | "Psikiyatri"
-  | "Diğer";
+type Subject = TusSubjectOrOther;
 
 interface Question {
   id: string;
@@ -56,19 +46,7 @@ interface WrongAnswer {
   learned: boolean;
 }
 
-const SUBJECTS: Subject[] = [
-  "Anatomi",
-  "Fizyoloji",
-  "Farmakoloji",
-  "Patoloji",
-  "Dahiliye",
-  "Cerrahi",
-  "Pediatri",
-  "Kardiyoloji",
-  "Nöroloji",
-  "Psikiyatri",
-  "Diğer",
-];
+const SUBJECTS: Subject[] = [...TUS_SUBJECTS_WITH_OTHER];
 
 const SAMPLE_QUESTIONS: Question[] = [
   {
@@ -76,7 +54,7 @@ const SAMPLE_QUESTIONS: Question[] = [
     text: "Kalbin pacemaker'ı olarak görev yapan yapı hangisidir?",
     options: ["AV nod", "SA nod", "His demeti", "Purkinje lifleri"],
     correct: 1,
-    subject: "Kardiyoloji",
+    subject: "Dahiliye",
     difficulty: "Kolay",
     explanation:
       "Sinoatriyal (SA) nod, kalbin doğal pace-maker'ıdır. Dakikada 60-100 impuls üreterek normal sinüs ritmini sağlar.",
@@ -98,7 +76,7 @@ const SAMPLE_QUESTIONS: Question[] = [
     text: "Beta-laktamazlara dirençli penisilin hangisidir?",
     options: ["Ampisilin", "Amoksisilin", "Metisilin", "Piperasilin"],
     correct: 2,
-    subject: "Farmakoloji",
+    subject: "Tıbbi Farmakoloji",
     difficulty: "Kolay",
     explanation:
       "Metisilin, beta-laktamaz enzimlerine karşı dirençlidir. Günümüzde klinikte kullanılmasa da MRSA adı bu antibiyotikten gelmektedir.",
@@ -176,7 +154,7 @@ export default function QuestionBankPage() {
     optionC: "",
     optionD: "",
     correct: "0",
-    subject: "Anatomi" as Subject,
+      subject: "Anatomi" as Subject,
     difficulty: "Orta" as Difficulty,
     explanation: "",
   });

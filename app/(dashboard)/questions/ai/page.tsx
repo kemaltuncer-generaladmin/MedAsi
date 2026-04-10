@@ -1,5 +1,5 @@
-import { ComingSoon } from '@/components/ui/ComingSoon'
+import { redirect } from "next/navigation";
 
 export default function Page() {
-  return <ComingSoon title="AI Soru Üretici" description="Yapay zeka ile ilgili bu modül geliştirilme aşamasındadır." backHref="/dashboard" />
+  redirect("/questions/fabrika");
 }

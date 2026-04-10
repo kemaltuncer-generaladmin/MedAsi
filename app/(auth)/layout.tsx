@@ -1,10 +1,10 @@
-import type { ReactNode } from 'react'
+import type { ReactNode } from "react";
 
 const stats = [
-  { value: '400.000+', label: 'Simülasyon' },
-  { value: '47', label: 'Uzmanlık' },
-  { value: '12', label: 'Üniversite' },
-]
+  { value: "400.000+", label: "Simülasyon" },
+  { value: "47", label: "Uzmanlık" },
+  { value: "12", label: "Üniversite" },
+];
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
@@ -26,17 +26,22 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               </div>
               <div className="space-y-3">
                 <h1 className="max-w-lg text-4xl font-semibold leading-tight">
-                  Klinik pratiğe hazırlık için güvenli, hızlı ve derinlikli dijital eğitim alanı.
+                  Klinik pratiğe hazırlık için güvenli, hızlı ve derinlikli
+                  dijital eğitim alanı.
                 </h1>
                 <p className="max-w-md text-sm italic text-[var(--color-text-secondary)]">
-                  Simülasyon, takip, karar desteği ve geri bildirim tek akışta birleşir.
+                  Simülasyon, takip, karar desteği ve geri bildirim tek akışta
+                  birleşir.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               {stats.map((stat) => (
-                <div key={stat.label} className="border border-[var(--color-border)] bg-[#0F0F14]/70 p-4 backdrop-blur-sm">
+                <div
+                  key={stat.label}
+                  className="border border-[var(--color-border)] bg-[#0F0F14]/70 p-4 backdrop-blur-sm"
+                >
                   <div className="text-2xl text-[var(--color-primary)] [font-family:var(--font-mono)]">
                     {stat.value}
                   </div>
@@ -66,5 +71,5 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
         }
       `}</style>
     </div>
-  )
+  );
 }

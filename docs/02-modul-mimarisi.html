@@ -1,0 +1,1467 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MEDASI — Modül Mimarisi & Kullanıcı Akışları</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --cyan: #00C4EB;
+      --indigo: #1400A6;
+      --bg: #07070A;
+      --surface: #111117;
+      --surface2: #18181F;
+      --border: #252530;
+      --text: #E8E8F0;
+      --muted: #6B6B80;
+      --success: #22D3A0;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --purple: #8B5CF6;
+      --orange: #F97316;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    @media print {
+      body { background: #fff; color: #111; }
+      .module-card, .flow-step { break-inside: avoid; }
+    }
+
+    /* ── COVER ── */
+    .cover {
+      background: linear-gradient(135deg, #07070A 0%, #0D0D1A 40%, #050520 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 60px 60px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: '';
+      position: absolute;
+      top: -120px; right: -120px;
+      width: 550px; height: 550px;
+      background: radial-gradient(circle, rgba(139,92,246,0.07) 0%, transparent 70%);
+    }
+    .cover-tag {
+      display: inline-block;
+      background: rgba(139,92,246,0.12);
+      border: 1px solid rgba(139,92,246,0.3);
+      color: var(--purple);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 4px;
+      margin-bottom: 24px;
+    }
+    .cover h1 {
+      font-size: 3rem;
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .cover h1 .brand { color: var(--cyan); }
+    .cover-subtitle {
+      font-size: 1.15rem;
+      color: var(--muted);
+      margin-bottom: 32px;
+      max-width: 640px;
+    }
+    .cover-meta {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .cover-meta-item { display: flex; flex-direction: column; gap: 4px; }
+    .cover-meta-label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: 1px; }
+    .cover-meta-value { font-size: 14px; font-weight: 600; }
+
+    /* ── SECTIONS ── */
+    section {
+      padding: 64px 60px;
+      border-bottom: 1px solid var(--border);
+    }
+    .section-header { margin-bottom: 40px; }
+    .section-number { font-size: 11px; font-weight: 700; letter-spacing: 3px; color: var(--cyan); text-transform: uppercase; margin-bottom: 8px; }
+    .section-title { font-size: 1.8rem; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 12px; }
+    .section-desc { font-size: 15px; color: var(--muted); max-width: 680px; line-height: 1.8; }
+
+    /* ── ARCHITECTURE MAP ── */
+    .arch-map {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 36px;
+      margin-bottom: 32px;
+    }
+    .arch-row {
+      display: flex;
+      gap: 12px;
+      margin-bottom: 12px;
+      align-items: stretch;
+    }
+    .arch-label {
+      width: 140px;
+      flex-shrink: 0;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+    }
+    .arch-blocks {
+      display: flex;
+      gap: 8px;
+      flex: 1;
+      flex-wrap: wrap;
+    }
+    .arch-block {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 16px;
+      font-size: 12px;
+      font-weight: 600;
+      white-space: nowrap;
+      flex: 1;
+      min-width: fit-content;
+      text-align: center;
+    }
+    .arch-block.cyan { border-color: rgba(0,196,235,0.3); color: var(--cyan); background: rgba(0,196,235,0.06); }
+    .arch-block.indigo { border-color: rgba(107,138,255,0.3); color: #6B8AFF; background: rgba(107,138,255,0.06); }
+    .arch-block.success { border-color: rgba(34,211,160,0.3); color: var(--success); background: rgba(34,211,160,0.06); }
+    .arch-block.purple { border-color: rgba(139,92,246,0.3); color: var(--purple); background: rgba(139,92,246,0.06); }
+    .arch-block.warning { border-color: rgba(245,158,11,0.3); color: var(--warning); background: rgba(245,158,11,0.06); }
+    .arch-block.orange { border-color: rgba(249,115,22,0.3); color: var(--orange); background: rgba(249,115,22,0.06); }
+    .arch-block.muted { border-color: var(--border); color: var(--muted); }
+    .arch-divider {
+      height: 1px;
+      background: var(--border);
+      margin: 16px 0;
+    }
+
+    /* ── MODULE GROUPS ── */
+    .module-group { margin-bottom: 56px; }
+    .module-group-header {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--border);
+    }
+    .module-group-icon { font-size: 24px; }
+    .module-group-title { font-size: 1.1rem; font-weight: 800; }
+    .module-group-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .module-group-badge {
+      margin-left: auto;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+
+    .module-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+    }
+    .module-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .module-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 2px;
+    }
+    .mc-cyan::before { background: var(--cyan); }
+    .mc-indigo::before { background: #6B8AFF; }
+    .mc-success::before { background: var(--success); }
+    .mc-purple::before { background: var(--purple); }
+    .mc-warning::before { background: var(--warning); }
+    .mc-orange::before { background: var(--orange); }
+
+    .module-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .module-icon { font-size: 22px; margin-bottom: 10px; }
+    .module-name { font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .module-path { font-size: 11px; color: var(--muted); font-family: 'Courier New', monospace; }
+    .module-status {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: 4px;
+      white-space: nowrap;
+    }
+    .status-live { background: rgba(34,211,160,0.12); color: var(--success); border: 1px solid rgba(34,211,160,0.3); }
+    .status-beta { background: rgba(245,158,11,0.12); color: var(--warning); border: 1px solid rgba(245,158,11,0.3); }
+    .status-dev { background: rgba(139,92,246,0.12); color: var(--purple); border: 1px solid rgba(139,92,246,0.3); }
+
+    .module-desc {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 16px;
+      line-height: 1.7;
+    }
+    .module-features {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .module-features li {
+      font-size: 12px;
+      padding-left: 14px;
+      position: relative;
+      line-height: 1.5;
+    }
+    .module-features li::before {
+      content: '—';
+      position: absolute;
+      left: 0;
+      color: var(--muted);
+    }
+    .module-ai-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--cyan);
+      background: rgba(0,196,235,0.08);
+      border: 1px solid rgba(0,196,235,0.2);
+      border-radius: 4px;
+      padding: 3px 8px;
+      margin-top: 12px;
+    }
+
+    /* ── USER FLOW ── */
+    .flow-container {
+      margin-bottom: 48px;
+    }
+    .flow-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .flow-persona {
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .flow-persona-tag {
+      font-size: 10px;
+      font-weight: 600;
+      padding: 3px 8px;
+      border-radius: 4px;
+      background: rgba(0,196,235,0.1);
+      color: var(--cyan);
+      border: 1px solid rgba(0,196,235,0.2);
+    }
+
+    .flow-steps {
+      display: flex;
+      gap: 0;
+      overflow-x: auto;
+      padding-bottom: 8px;
+    }
+    .flow-step {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 16px;
+      min-width: 160px;
+      flex: 1;
+      position: relative;
+    }
+    .flow-step + .flow-step {
+      margin-left: 8px;
+    }
+    .flow-step-num {
+      font-size: 10px;
+      font-weight: 700;
+      color: var(--cyan);
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    .flow-step-title {
+      font-size: 13px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .flow-step-desc {
+      font-size: 11px;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+    .flow-arrow {
+      display: flex;
+      align-items: center;
+      padding: 0 4px;
+      color: var(--border);
+      font-size: 18px;
+      flex-shrink: 0;
+      align-self: center;
+    }
+
+    /* ── PERMISSION TABLE ── */
+    .perm-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+    .perm-table th {
+      text-align: left;
+      padding: 12px 16px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+    }
+    .perm-table td {
+      padding: 12px 16px;
+      border: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .perm-table tr:nth-child(even) td {
+      background: rgba(255,255,255,0.01);
+    }
+    .perm-table td:first-child { font-weight: 600; }
+    .check { color: var(--success); font-weight: 700; }
+    .partial { color: var(--warning); font-weight: 700; }
+    .cross { color: var(--muted); }
+    .perm-plan {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .plan-free { background: rgba(107,107,128,0.15); color: var(--muted); }
+    .plan-std { background: rgba(0,196,235,0.1); color: var(--cyan); }
+    .plan-pro { background: rgba(139,92,246,0.15); color: var(--purple); }
+
+    /* ── DATA FLOW ── */
+    .data-flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .df-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+    .df-icon { font-size: 24px; margin-bottom: 12px; }
+    .df-title { font-size: 14px; font-weight: 700; margin-bottom: 8px; }
+    .df-items {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .df-items li {
+      font-size: 12px;
+      color: var(--muted);
+      padding-left: 14px;
+      position: relative;
+    }
+    .df-items li::before { content: '·'; position: absolute; left: 4px; color: var(--cyan); }
+
+    /* ── HIGHLIGHT ── */
+    .highlight-box {
+      background: rgba(0,196,235,0.06);
+      border: 1px solid rgba(0,196,235,0.2);
+      border-left: 4px solid var(--cyan);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 24px 0;
+    }
+    .highlight-box p { font-size: 14px; line-height: 1.7; }
+    .highlight-box strong { color: var(--cyan); }
+    .divider { height: 1px; background: linear-gradient(to right, transparent, var(--border), transparent); margin: 32px 0; }
+
+    /* ── FOOTER ── */
+    .footer {
+      padding: 32px 60px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border);
+    }
+    .footer-brand { font-size: 16px; font-weight: 800; }
+    .footer-brand span { color: var(--cyan); }
+    .footer-doc { font-size: 12px; color: var(--muted); }
+    .footer-page { font-size: 12px; color: var(--muted); }
+
+    /* ── SIDEBAR NAV ── */
+    .nav-diagram {
+      display: flex;
+      gap: 24px;
+      align-items: flex-start;
+    }
+    .nav-sidebar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      width: 220px;
+      flex-shrink: 0;
+    }
+    .nav-sidebar-title {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .nav-section-label {
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      padding: 8px 0 4px;
+    }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 8px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: default;
+    }
+    .nav-item.active {
+      background: rgba(0,196,235,0.1);
+      color: var(--cyan);
+    }
+    .nav-item .dot {
+      width: 5px; height: 5px;
+      border-radius: 50%;
+      background: var(--muted);
+      flex-shrink: 0;
+    }
+    .nav-item.active .dot { background: var(--cyan); }
+
+    .nav-content {
+      flex: 1;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .nav-content-title { font-size: 14px; font-weight: 700; margin-bottom: 16px; color: var(--muted); }
+    .nav-map {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .nav-map-item {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+    .nav-map-item span { display: block; font-size: 10px; color: var(--muted); font-weight: 400; margin-top: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-tag">Döküman Serisi / 02</div>
+  <h1><span class="brand">MEDASI</span> — Modül Mimarisi<br>& Kullanıcı Akışları</h1>
+  <p class="cover-subtitle">
+    Platformun 30+ modülünün nasıl organize edildiği, birbirine bağlandığı
+    ve kullanıcı yolculuklarının nasıl tasarlandığının detaylı haritası.
+  </p>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Platform</span>
+      <span class="cover-meta-value">medasi.com.tr</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Seri</span>
+      <span class="cover-meta-value">02 / 05</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Konu</span>
+      <span class="cover-meta-value">Modül Mimarisi</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Modül Sayısı</span>
+      <span class="cover-meta-value">30+</span>
+    </div>
+  </div>
+</div>
+
+<!-- BÖLÜM 1: GENEL MİMARİ HARİTA -->
+<section>
+  <div class="section-header">
+    <div class="section-number">01 — Mimari Genel Bakış</div>
+    <h2 class="section-title">Platform Katmanları</h2>
+    <p class="section-desc">
+      MEDASI dört ana katman üzerine inşa edilmiştir. Her katman kendi içinde bağımsız
+      çalışabilir; ancak birlikte tam değeri ortaya koyar.
+    </p>
+  </div>
+
+  <div class="arch-map">
+    <div class="arch-row">
+      <div class="arch-label">Kullanıcı Arayüzü</div>
+      <div class="arch-blocks">
+        <div class="arch-block cyan">Landing Page</div>
+        <div class="arch-block cyan">Auth Sayfaları</div>
+        <div class="arch-block cyan">Dashboard</div>
+        <div class="arch-block cyan">Admin Panel</div>
+        <div class="arch-block cyan">Upgrade / Fiyatlandırma</div>
+      </div>
+    </div>
+    <div class="arch-divider"></div>
+    <div class="arch-row">
+      <div class="arch-label">Modül Grupları</div>
+      <div class="arch-blocks">
+        <div class="arch-block indigo">AI Katmanı</div>
+        <div class="arch-block success">Eğitim Katmanı</div>
+        <div class="arch-block warning">Klinik Katmanı</div>
+        <div class="arch-block purple">Planlama & Üretkenlik</div>
+        <div class="arch-block orange">Hesap & Yönetim</div>
+      </div>
+    </div>
+    <div class="arch-divider"></div>
+    <div class="arch-row">
+      <div class="arch-label">API Katmanı</div>
+      <div class="arch-blocks">
+        <div class="arch-block muted">/api/ai/chat</div>
+        <div class="arch-block muted">/api/patients</div>
+        <div class="arch-block muted">/api/cases</div>
+        <div class="arch-block muted">/api/admin/users</div>
+        <div class="arch-block muted">/api/flashcards</div>
+        <div class="arch-block muted">/api/questions</div>
+      </div>
+    </div>
+    <div class="arch-divider"></div>
+    <div class="arch-row">
+      <div class="arch-label">Altyapı</div>
+      <div class="arch-blocks">
+        <div class="arch-block muted">Supabase Auth</div>
+        <div class="arch-block muted">PostgreSQL + Prisma</div>
+        <div class="arch-block muted">Anthropic Claude API</div>
+        <div class="arch-block muted">Resend Email</div>
+        <div class="arch-block muted">Vercel Edge</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="highlight-box">
+    <p>
+      <strong>Navigasyon Yapısı:</strong> Dashboard sol kenar çubuğu
+      <strong>GENEL / MODÜLLER / YÖNETİM / HESAP</strong> olmak üzere dört bölüme ayrılır.
+      Her modül bu hiyerarşi içinde mantıksal olarak konumlandırılmıştır.
+    </p>
+  </div>
+
+  <div class="nav-diagram">
+    <div class="nav-sidebar">
+      <div class="nav-sidebar-title">Kenar Çubuğu</div>
+      <div class="nav-section-label">GENEL</div>
+      <div class="nav-item active"><span class="dot"></span>Dashboard</div>
+      <div class="nav-item"><span class="dot"></span>Günlük Brifing</div>
+      <div class="nav-item"><span class="dot"></span>AI Asistan</div>
+      <div class="nav-section-label">MODÜLLER</div>
+      <div class="nav-item"><span class="dot"></span>Eğitim</div>
+      <div class="nav-item"><span class="dot"></span>Klinik</div>
+      <div class="nav-item"><span class="dot"></span>Planlayıcılar</div>
+      <div class="nav-section-label">YÖNETİM</div>
+      <div class="nav-item"><span class="dot"></span>Hastalar</div>
+      <div class="nav-item"><span class="dot"></span>Vakalar</div>
+      <div class="nav-section-label">HESAP</div>
+      <div class="nav-item"><span class="dot"></span>Profil & Ayarlar</div>
+      <div class="nav-item"><span class="dot"></span>Cüzdan</div>
+    </div>
+    <div class="nav-content">
+      <div class="nav-content-title">Tüm Modüller — Tam URL Haritası</div>
+      <div class="nav-map">
+        <div class="nav-map-item">/dashboard <span>Ana özet ekranı</span></div>
+        <div class="nav-map-item">/daily-briefing <span>Günlük görev ve istatistik</span></div>
+        <div class="nav-map-item">/ai-assistant <span>Genel AI sohbet</span></div>
+        <div class="nav-map-item">/ai-diagnosis <span>Diferansiyel tanı</span></div>
+        <div class="nav-map-item">/ai/control <span>AI ayarları ve limitler</span></div>
+        <div class="nav-map-item">/ai/history <span>AI konuşma geçmişi</span></div>
+        <div class="nav-map-item">/ai/wallet <span>AI token cüzdanı</span></div>
+        <div class="nav-map-item">/case-rpg <span>Vaka simülatörü</span></div>
+        <div class="nav-map-item">/clinic <span>Klinik ana modül</span></div>
+        <div class="nav-map-item">/clinic/clinical-notes <span>Klinik notlar</span></div>
+        <div class="nav-map-item">/clinic/receipt <span>Reçete</span></div>
+        <div class="nav-map-item">/clinic/service <span>Hizmet kayıtları</span></div>
+        <div class="nav-map-item">/clinic/discharged <span>Taburcu edilenler</span></div>
+        <div class="nav-map-item">/patients <span>Hasta yönetimi</span></div>
+        <div class="nav-map-item">/my-patients <span>Kişisel hasta listesi</span></div>
+        <div class="nav-map-item">/cases <span>Vaka yönetimi</span></div>
+        <div class="nav-map-item">/lab-viewing <span>Lab sonuçları görüntüleme</span></div>
+        <div class="nav-map-item">/flashcards <span>Flash kart ana modül</span></div>
+        <div class="nav-map-item">/flashcards/ai <span>AI kart üretimi</span></div>
+        <div class="nav-map-item">/flashcards/spot-notlar <span>Spot not kartları</span></div>
+        <div class="nav-map-item">/exams <span>Sınav merkezi</span></div>
+        <div class="nav-map-item">/exams/osce <span>OSCE simülatörü</span></div>
+        <div class="nav-map-item">/exams/kuramsal <span>Kuramsal sınav</span></div>
+        <div class="nav-map-item">/exams/sozlu <span>Sözlü sınav</span></div>
+        <div class="nav-map-item">/exams/zilli <span>Akıllı sınav</span></div>
+        <div class="nav-map-item">/questions/bank <span>Soru bankası</span></div>
+        <div class="nav-map-item">/questions/ai <span>AI soru üretici</span></div>
+        <div class="nav-map-item">/questions/fabrika <span>Soru fabrikası</span></div>
+        <div class="nav-map-item">/planners <span>Planlayıcı merkezi</span></div>
+        <div class="nav-map-item">/planners/tus <span>TUS planlayıcı</span></div>
+        <div class="nav-map-item">/planners/ders <span>Ders planlayıcı</span></div>
+        <div class="nav-map-item">/planners/intern <span>İntern planlayıcı</span></div>
+        <div class="nav-map-item">/pomodoro <span>Pomodoro zamanlayıcı</span></div>
+        <div class="nav-map-item">/notes <span>Not editörü</span></div>
+        <div class="nav-map-item">/account <span>Hesap genel</span></div>
+        <div class="nav-map-item">/account/wallet <span>Ödeme ve abonelik</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 2: AI MODÜLLERI -->
+<section>
+  <div class="section-header">
+    <div class="section-number">02 — AI Katmanı</div>
+    <h2 class="section-title">Yapay Zeka Modülleri</h2>
+    <p class="section-desc">
+      MEDASI'nın AI modülleri iki farklı model seviyesinde çalışır:
+      hız gerektiren görevlerde <strong style="color:var(--cyan)">Sonnet</strong>,
+      düşük maliyetli işlemlerde <strong style="color:var(--purple)">Haiku</strong>.
+      Tüm AI çağrıları <code style="color:var(--warning)">/api/ai/chat</code> üzerinden yönlendirilir.
+    </p>
+  </div>
+
+  <div class="module-group">
+    <div class="module-grid">
+
+      <div class="module-card mc-cyan">
+        <div class="module-icon">🤖</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">AI Asistan</div>
+            <div class="module-path">/ai-assistant</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Tıbbi konularda genel sohbet arayüzü. Sol panelde konuşma geçmişi,
+          sağda aktif chat, hızlı prompt kısayolları ve model seçimi mevcut.
+        </div>
+        <ul class="module-features">
+          <li>Konuşma geçmişi ve oturum yönetimi</li>
+          <li>Hızlı prompt şablonları (ilaç sorgula, tanıyı açıkla, vb.)</li>
+          <li>Markdown ve tıbbi terminoloji formatlaması</li>
+          <li>Günlük kullanım limiti takibi</li>
+          <li>Konuşma kaydetme ve dışa aktarma</li>
+        </ul>
+        <div class="module-ai-badge">✦ Claude Sonnet — FAST</div>
+      </div>
+
+      <div class="module-card mc-indigo">
+        <div class="module-icon">🔬</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">AI Tanı Asistanı</div>
+            <div class="module-path">/ai-diagnosis</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Semptom girişinden diferansiyel tanı listesi üreten yapılandırılmış
+          tanı akışı. Her tanı için olasılık yüzdesi ve kısa açıklama üretir.
+        </div>
+        <ul class="module-features">
+          <li>Semptom, süre ve ek bilgi girişi formu</li>
+          <li>Diferansiyel tanı listesi (olasılık çubukları)</li>
+          <li>Her tanı için açıklama ve sonraki adım önerileri</li>
+          <li>İlgili lab testleri ve görüntüleme önerileri</li>
+          <li>Tanı geçmişi kayıt</li>
+        </ul>
+        <div class="module-ai-badge">✦ Claude Sonnet — FAST</div>
+      </div>
+
+      <div class="module-card mc-success">
+        <div class="module-icon">⚔️</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Vaka RPG</div>
+            <div class="module-path">/case-rpg</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Oyunlaştırılmış tıbbi vaka simülatörü. Uzmanlık ve zorluk seviyesi
+          seçildikten sonra AI gerçekçi hasta vakası üretir ve yönlendirir.
+          XP ve skor sistemi öğrenmeyi motive eder.
+        </div>
+        <ul class="module-features">
+          <li>Uzmanlık alanı seçimi (22+ branş)</li>
+          <li>Zorluk seviyesi: Kolay / Orta / Zor / Uzman</li>
+          <li>AI-üretimi gerçekçi hasta senaryoları</li>
+          <li>XP kazanma ve seviye sistemi</li>
+          <li>Vaka sonunda detaylı geri bildirim</li>
+        </ul>
+        <div class="module-ai-badge">✦ Claude Sonnet — FAST</div>
+      </div>
+
+      <div class="module-card mc-purple">
+        <div class="module-icon">💻</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Medikal Terminal</div>
+            <div class="module-path">/terminal</div>
+          </div>
+          <span class="module-status status-dev">GELİŞTİRME</span>
+        </div>
+        <div class="module-desc">
+          CLI tarzı arayüzde komut satırıyla hızlı tıbbi sorgu yapma.
+          İlaç, tanı, lab, ICD kodu ve vital sorgularını metin komutlarıyla destekler.
+        </div>
+        <ul class="module-features">
+          <li>diagnose [semptom] — diferansiyel üret</li>
+          <li>drugs [ilaç adı] — ilaç bilgisi sorgula</li>
+          <li>labs [test] — referans aralıkları</li>
+          <li>icd [kod/hastalık] — ICD-10 sorgulama</li>
+          <li>vitals [yaş/cinsiyet] — normal değerler</li>
+        </ul>
+        <div class="module-ai-badge">✦ Claude Haiku — EFFICIENT</div>
+      </div>
+
+      <div class="module-card mc-warning">
+        <div class="module-icon">⚙️</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">AI Kontrol Merkezi</div>
+            <div class="module-path">/ai/control</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Kullanıcının AI kullanımını izlediği ve yapılandırdığı yönetim paneli.
+          Günlük limit, model seçimi ve öncelik ayarları bu ekrandan yapılır.
+        </div>
+        <ul class="module-features">
+          <li>Günlük / aylık AI kullanım metrikleri</li>
+          <li>Model tercihi (Sonnet / Haiku)</li>
+          <li>Modül bazlı limit yönetimi</li>
+          <li>Kullanım geçmişi ve harcama özeti</li>
+        </ul>
+        <div class="module-ai-badge">✦ Kullanım İzleme Modülü</div>
+      </div>
+
+      <div class="module-card mc-orange">
+        <div class="module-icon">💬</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">AI Geçmiş & Cüzdan</div>
+            <div class="module-path">/ai/history · /ai/wallet</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Tüm AI konuşmalarının arşivi ve AI token harcamalarının izlendiği
+          dijital cüzdan. Abonelik planına göre kota ve şarj yönetimi.
+        </div>
+        <ul class="module-features">
+          <li>Konuşma geçmişi arşivi ve arama</li>
+          <li>Token bakiyesi ve yenileme</li>
+          <li>Modül bazlı harcama dağılımı</li>
+          <li>Otomatik yenileme planı ayarları</li>
+        </ul>
+        <div class="module-ai-badge">✦ Abonelik Entegrasyonu</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 3: EĞİTİM MODÜLLERİ -->
+<section>
+  <div class="section-header">
+    <div class="section-number">03 — Eğitim Katmanı</div>
+    <h2 class="section-title">Eğitim & Sınav Modülleri</h2>
+    <p class="section-desc">
+      Tıp öğrencisinin preklinikten TUS'a uzanan tüm öğrenme yolculuğunu
+      kapsayan modüller grubu. Her modül hem bağımsız çalışır hem de
+      diğer eğitim araçlarıyla entegre olur.
+    </p>
+  </div>
+
+  <div class="module-group">
+    <div class="module-grid">
+
+      <div class="module-card mc-cyan">
+        <div class="module-icon">🃏</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Flash Kart Sistemi</div>
+            <div class="module-path">/flashcards</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Aralıklı tekrar algoritmasi ile çalışan flash kart sistemi.
+          Manuel kart oluşturma, AI kart üretimi ve hazır spot not
+          kartlarını kapsar.
+        </div>
+        <ul class="module-features">
+          <li>Manuel flash kart oluşturma ve düzenleme</li>
+          <li>Konu ve ders bazında organizasyon</li>
+          <li>Spaced repetition öğrenme algoritması</li>
+          <li>Spot notlar — hazır kart kütüphanesi</li>
+          <li>AI ile konu girişinden otomatik kart üretimi</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Flash Kart Üretimi</div>
+      </div>
+
+      <div class="module-card mc-indigo">
+        <div class="module-icon">📝</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Soru Bankası & Fabrika</div>
+            <div class="module-path">/questions</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          TUS ve tıp sınavlarına yönelik kapsamlı soru bankası.
+          AI destekli soru üretici ve soru fabrikası modülleriyle
+          içerik kütüphanesi sürekli genişler.
+        </div>
+        <ul class="module-features">
+          <li>Konu ve sistem bazlı soru filtreleme</li>
+          <li>Çoktan seçmeli, doğru/yanlış, açık uçlu formatlar</li>
+          <li>AI ile yeni soru ve açıklama üretimi</li>
+          <li>Soru fabrikası — toplu üretim aracı</li>
+          <li>Kişisel performans ve hata analizi</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Soru Üreticisi</div>
+      </div>
+
+      <div class="module-card mc-success">
+        <div class="module-icon">🏆</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Sınav Merkezi</div>
+            <div class="module-path">/exams</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Dört farklı sınav formatını barındıran kapsamlı sınav simülasyon
+          merkezi. Gerçek sınav koşullarını taklit eden zamanlı ve puanlamalı
+          sınavlar.
+        </div>
+        <ul class="module-features">
+          <li>OSCE — klinik beceri istasyonları simülasyonu</li>
+          <li>Kuramsal — çoktan seçmeli TUS formatı</li>
+          <li>Sözlü — AI ile etkileşimli sözlü sınav</li>
+          <li>Akıllı Sınav — adaptif zorluk seviyesi</li>
+          <li>Detaylı sınav sonuç analizi ve raporlama</li>
+        </ul>
+        <div class="module-ai-badge">✦ Sözlü Sınav AI Değerlendirmesi</div>
+      </div>
+
+      <div class="module-card mc-purple">
+        <div class="module-icon">📓</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Not Editörü</div>
+            <div class="module-path">/notes</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          İki panelli not editörü: sol tarafta not listesi ve organizasyon,
+          sağ tarafta zengin metin editörü. LocalStorage ile anlık kaydetme,
+          Prisma API ile kalıcı saklama.
+        </div>
+        <ul class="module-features">
+          <li>Konu/ders bazlı not organizasyonu</li>
+          <li>Zengin metin formatlaması (başlık, liste, kod)</li>
+          <li>Anlık otomatik kaydetme (localStorage)</li>
+          <li>Not arama ve filtreleme</li>
+          <li>AI ile not özeti ve yapılandırma (yakında)</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Not Özeti (Yol Haritasında)</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 4: KLİNİK MODÜLLER -->
+<section>
+  <div class="section-header">
+    <div class="section-number">04 — Klinik Katmanı</div>
+    <h2 class="section-title">Klinik Yönetim Modülleri</h2>
+    <p class="section-desc">
+      Asistan ve uzman hekimlerin günlük klinik iş akışını destekleyen modüller.
+      Hasta takibinden reçeteye, tahlil görüntülemeden taburcu yönetimine kadar
+      entegre klinik suite.
+    </p>
+  </div>
+
+  <div class="module-group">
+    <div class="module-grid">
+
+      <div class="module-card mc-warning">
+        <div class="module-icon">👥</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Hasta Yönetimi</div>
+            <div class="module-path">/patients · /my-patients</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Tam CRUD özellikli hasta kayıt ve takip sistemi. Arama,
+          filtre ve avatar kartları ile organize hasta listesi yönetimi.
+          Kişisel hasta listesi ayrı görünümde.
+        </div>
+        <ul class="module-features">
+          <li>Hasta ekleme, düzenleme, silme (modal ile)</li>
+          <li>Ad, TC, doğum tarihi, tanı arama ve filtreleme</li>
+          <li>Hasta detay sayfası ve geçmiş ziyaret özeti</li>
+          <li>Hasta kartına vaka ve not bağlama</li>
+          <li>Kişisel hasta listesi (/my-patients)</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Hasta Özeti (Yol Haritasında)</div>
+      </div>
+
+      <div class="module-card mc-orange">
+        <div class="module-icon">📋</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Vaka Yönetimi</div>
+            <div class="module-path">/cases</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Hasta bağlantılı klinik vaka takip sistemi. Tarih filtresi,
+          sol kenarlık renk kodlaması ve hasta bağlama ile organize
+          vaka yönetimi.
+        </div>
+        <ul class="module-features">
+          <li>Vaka oluşturma ve hasta ile ilişkilendirme</li>
+          <li>Durum takibi (Aktif / Kapalı / Beklemede)</li>
+          <li>Tarih aralığı filtresi</li>
+          <li>Vaka notları ve ek dokümanlar</li>
+          <li>Vaka özet çıktısı (PDF)</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Vaka Analizi</div>
+      </div>
+
+      <div class="module-card mc-cyan">
+        <div class="module-icon">🏥</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Klinik Modül Merkezi</div>
+            <div class="module-path">/clinic</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Kliniğe özel iş akışlarını barındıran merkez modül.
+          Klinik notlar, reçete, hizmet kayıtları ve taburcu yönetimini
+          tek çatı altında toplar.
+        </div>
+        <ul class="module-features">
+          <li>Klinik notlar — AI destekli not şablonları</li>
+          <li>Reçete oluşturma ve yazdırma</li>
+          <li>Hizmet kaydı ve ücretlendirme</li>
+          <li>Taburcu edilenler listesi ve özet</li>
+          <li>AI klinik asistan entegrasyonu</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Klinik Asistan</div>
+      </div>
+
+      <div class="module-card mc-success">
+        <div class="module-icon">🔭</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Lab Görüntüleyici</div>
+            <div class="module-path">/lab-viewing</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Tahlil sonuçlarını görsel olarak sunan ve normal değer aralıklarıyla
+          karşılaştırarak yorumlayan modül. AI destekli anomali tespiti
+          ve kısa açıklama üretimi.
+        </div>
+        <ul class="module-features">
+          <li>Tahlil sonucu yükleme ve görüntüleme</li>
+          <li>Normal aralık karşılaştırma ve renk kodlama</li>
+          <li>AI ile tahlil yorumu ve açıklama</li>
+          <li>Geçmiş tahlillerle trend karşılaştırma</li>
+          <li>Tahlil raporu PDF dışa aktarım</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Tahlil Yorumlama</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 5: ÜRETKENLİK & PLANLAMA -->
+<section>
+  <div class="section-header">
+    <div class="section-number">05 — Planlama & Üretkenlik</div>
+    <h2 class="section-title">Planlayıcı & Üretkenlik Modülleri</h2>
+    <p class="section-desc">
+      Öğrenci ve hekimin zaman yönetimini destekleyen modüller.
+      Ders programından TUS takvimine, staj planlamasından günlük
+      odak çalışmasına kadar kapsamlı üretkenlik araçları.
+    </p>
+  </div>
+
+  <div class="module-group">
+    <div class="module-grid">
+
+      <div class="module-card mc-indigo">
+        <div class="module-icon">🗓️</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Planlayıcı Merkezi</div>
+            <div class="module-path">/planners</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Altı farklı planlayıcı modülünü barındıran merkez. Her kullanıcı
+          profiline uygun ayrı planlayıcı: TUS, ders, staj, intern,
+          preklinik ve akıllı planlayıcı.
+        </div>
+        <ul class="module-features">
+          <li>TUS Planlayıcı — konu ve soru hedef takibi</li>
+          <li>Ders Planlayıcı — haftalık program oluşturma</li>
+          <li>Staj Planlayıcı — rotasyon ve görev takibi</li>
+          <li>İntern Planlayıcı — günlük görev listesi</li>
+          <li>Akıllı Planlayıcı — AI destekli program önerisi</li>
+        </ul>
+        <div class="module-ai-badge">✦ Akıllı Planlayıcı AI Entegrasyonu</div>
+      </div>
+
+      <div class="module-card mc-success">
+        <div class="module-icon">⏱️</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Pomodoro Zamanlayıcı</div>
+            <div class="module-path">/pomodoro</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          SVG animasyonlu dairesel zamanlayıcı ile Pomodoro tekniği desteği.
+          Çalışma / mola modları, oturum geçmişi ve haftalık üretkenlik
+          istatistikleri.
+        </div>
+        <ul class="module-features">
+          <li>25-5 ve 50-10 dk çalışma/mola modları</li>
+          <li>SVG dairesel ilerleme animasyonu</li>
+          <li>Oturum tamamlama geçmişi</li>
+          <li>Günlük ve haftalık odak süresi istatistiği</li>
+          <li>Görev bağlama ve oturum notları</li>
+        </ul>
+        <div class="module-ai-badge">✦ Üretkenlik İstatistik Entegrasyonu</div>
+      </div>
+
+      <div class="module-card mc-warning">
+        <div class="module-icon">🌅</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Günlük Brifing</div>
+            <div class="module-path">/daily-briefing</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Her gün başında kullanıcıyı karşılayan özet ekranı. Günlük
+          istatistikler, günün vakası, öğrenme hedefleri ve
+          haftalık ilerleme grafiği.
+        </div>
+        <ul class="module-features">
+          <li>Bugünün özet istatistikleri</li>
+          <li>Günün tıbbi vakası ve sorusu</li>
+          <li>Günlük öğrenme hedefleri</li>
+          <li>Haftalık ilerleme çubuk grafiği</li>
+          <li>Motivasyon mesajı ve öneri</li>
+        </ul>
+        <div class="module-ai-badge">✦ AI Günlük Öneri Üretimi</div>
+      </div>
+
+      <div class="module-card mc-purple">
+        <div class="module-icon">📊</div>
+        <div class="module-card-header">
+          <div>
+            <div class="module-name">Dashboard Ana Ekranı</div>
+            <div class="module-path">/dashboard</div>
+          </div>
+          <span class="module-status status-live">CANLI</span>
+        </div>
+        <div class="module-desc">
+          Kullanıcının tüm aktivitesinin tek bakışta görülebildiği
+          kontrol merkezi. İstatistik kartları, son aktiviteler,
+          hızlı erişim linkleri ve bildirimler.
+        </div>
+        <ul class="module-features">
+          <li>Aktif hasta, vaka, soru istatistikleri</li>
+          <li>Son AI konuşmalar ve soru geçmişi</li>
+          <li>Hızlı erişim — en sık kullanılan modüller</li>
+          <li>Çalışma serisi (streak) takibi</li>
+          <li>Abonelik durum ve limit özeti</li>
+        </ul>
+        <div class="module-ai-badge">✦ Kişiselleştirilmiş Öneriler</div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 6: KULLANICI AKIŞLARI -->
+<section>
+  <div class="section-header">
+    <div class="section-number">06 — Kullanıcı Akışları</div>
+    <h2 class="section-title">Tipik Kullanım Yolculukları</h2>
+    <p class="section-desc">
+      Üç temel kullanıcı profilinin platform içindeki günlük yolculukları.
+      Her akış modüller arası geçişleri ve değer üretim noktalarını gösterir.
+    </p>
+  </div>
+
+  <!-- AKIŞ 1 -->
+  <div class="flow-container">
+    <div class="flow-header">
+      <span class="flow-persona">📚 TUS'a Hazırlanan Öğrenci — Günlük Akış</span>
+      <span class="flow-persona-tag">Eğitim Odaklı</span>
+    </div>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-num">01</div>
+        <div class="flow-step-title">Günlük Brifing</div>
+        <div class="flow-step-desc">Günün hedeflerini ve günün sorusunu inceler. Streak'ini kontrol eder.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">02</div>
+        <div class="flow-step-title">Flash Kart Tekrarı</div>
+        <div class="flow-step-desc">Spaced repetition algoritması ile bugün tekrar sırası gelen kartları çalışır.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">03</div>
+        <div class="flow-step-title">Soru Bankası</div>
+        <div class="flow-step-desc">Hedeflediği konudan sorular çözer. Yanlışlarını AI açıklamasıyla analiz eder.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">04</div>
+        <div class="flow-step-title">Vaka RPG</div>
+        <div class="flow-step-desc">Bir klinik vaka simülasyonu yapar, XP kazanır ve tanı mantığını pekiştirir.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">05</div>
+        <div class="flow-step-title">TUS Planlayıcı</div>
+        <div class="flow-step-desc">Bugünün hedeflerini tamamlandı olarak işaretler, yarın için plan günceller.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AKIŞ 2 -->
+  <div class="flow-container">
+    <div class="flow-header">
+      <span class="flow-persona">🩺 İntern Hekim — Klinik Nöbet Akışı</span>
+      <span class="flow-persona-tag">Klinik Odaklı</span>
+    </div>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-num">01</div>
+        <div class="flow-step-title">Hasta Yönetimi</div>
+        <div class="flow-step-desc">Nöbet devralırken hasta listesini inceler, yeni hasta ekler.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">02</div>
+        <div class="flow-step-title">AI Tanı Asistanı</div>
+        <div class="flow-step-desc">Kliniğe gelen hasta semptomlarını girer, diferansiyel tanı listesini görür.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">03</div>
+        <div class="flow-step-title">Lab Görüntüleyici</div>
+        <div class="flow-step-desc">Hastanın tahlil sonuçlarını yükler, AI yorumunu okur ve anomalileri işaretler.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">04</div>
+        <div class="flow-step-title">Klinik Notlar</div>
+        <div class="flow-step-desc">AI şablonu ile hızlı klinik not yazar, vaka kartına ekler.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">05</div>
+        <div class="flow-step-title">Vaka Kapama</div>
+        <div class="flow-step-desc">Taburcu modülünden özet hazırlar, nöbet notunu günceller.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- AKIŞ 3 -->
+  <div class="flow-container">
+    <div class="flow-header">
+      <span class="flow-persona">👨‍⚕️ Uzman Hekim — Konsültasyon Akışı</span>
+      <span class="flow-persona-tag">Karar Destek Odaklı</span>
+    </div>
+    <div class="flow-steps">
+      <div class="flow-step">
+        <div class="flow-step-num">01</div>
+        <div class="flow-step-title">AI Asistan</div>
+        <div class="flow-step-desc">Nadir karşılaşılan bir durumu AI'a danışır, güncel yaklaşım önerisi alır.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">02</div>
+        <div class="flow-step-title">Medikal Terminal</div>
+        <div class="flow-step-desc">Hızlı ilaç etkileşim sorgusu ve doz hesaplaması yapar.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">03</div>
+        <div class="flow-step-title">Reçete Modülü</div>
+        <div class="flow-step-desc">Tedavi planını reçete formatında yazar, yazdırır veya dijital iletir.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">04</div>
+        <div class="flow-step-title">Vaka Kaydı</div>
+        <div class="flow-step-desc">Konsültasyon notunu vakaya bağlar, takip tarihini belirler.</div>
+      </div>
+      <div class="flow-arrow">→</div>
+      <div class="flow-step">
+        <div class="flow-step-num">05</div>
+        <div class="flow-step-title">Dashboard</div>
+        <div class="flow-step-desc">Günlük özet istatistikleri ile gün sonu değerlendirmesi yapar.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 7: MODÜL - ABONELIK MATRISI -->
+<section>
+  <div class="section-header">
+    <div class="section-number">07 — Erişim Matrisi</div>
+    <h2 class="section-title">Modül × Abonelik Planı</h2>
+    <p class="section-desc">
+      Hangi modülün hangi abonelik planına dahil olduğunun tam matrisi.
+    </p>
+  </div>
+
+  <table class="perm-table">
+    <thead>
+      <tr>
+        <th>Modül</th>
+        <th><span class="perm-plan plan-free">Ücretsiz</span></th>
+        <th><span class="perm-plan plan-std">Standart</span></th>
+        <th><span class="perm-plan plan-pro">Pro</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>Dashboard & Günlük Brifing</td>
+        <td class="check">✓ Tam</td>
+        <td class="check">✓ Tam</td>
+        <td class="check">✓ Tam</td>
+      </tr>
+      <tr>
+        <td>AI Asistan</td>
+        <td class="partial">◐ 10 mesaj/gün</td>
+        <td class="partial">◐ 50 mesaj/gün</td>
+        <td class="check">✓ Sınırsız</td>
+      </tr>
+      <tr>
+        <td>AI Tanı Asistanı</td>
+        <td class="partial">◐ 3 sorgu/gün</td>
+        <td class="check">✓ 20 sorgu/gün</td>
+        <td class="check">✓ Sınırsız</td>
+      </tr>
+      <tr>
+        <td>Vaka RPG</td>
+        <td class="partial">◐ 2 vaka/gün</td>
+        <td class="check">✓ 10 vaka/gün</td>
+        <td class="check">✓ Sınırsız</td>
+      </tr>
+      <tr>
+        <td>Flash Kart (Manuel)</td>
+        <td class="check">✓ 50 kart</td>
+        <td class="check">✓ 500 kart</td>
+        <td class="check">✓ Sınırsız</td>
+      </tr>
+      <tr>
+        <td>AI Flash Kart Üretimi</td>
+        <td class="cross">✗</td>
+        <td class="check">✓ 20/gün</td>
+        <td class="check">✓ Sınırsız</td>
+      </tr>
+      <tr>
+        <td>Soru Bankası</td>
+        <td class="partial">◐ 500 soru</td>
+        <td class="check">✓ Tam erişim</td>
+        <td class="check">✓ Tam erişim</td>
+      </tr>
+      <tr>
+        <td>Sınav Merkezi (OSCE, TUS vb.)</td>
+        <td class="partial">◐ Sınırlı</td>
+        <td class="check">✓ Tam</td>
+        <td class="check">✓ Tam + Raporlama</td>
+      </tr>
+      <tr>
+        <td>Hasta & Vaka Yönetimi</td>
+        <td class="partial">◐ 10 hasta</td>
+        <td class="check">✓ 100 hasta</td>
+        <td class="check">✓ Sınırsız</td>
+      </tr>
+      <tr>
+        <td>Klinik Notlar & Reçete</td>
+        <td class="cross">✗</td>
+        <td class="check">✓ Tam</td>
+        <td class="check">✓ + AI Şablon</td>
+      </tr>
+      <tr>
+        <td>Lab Görüntüleyici</td>
+        <td class="cross">✗</td>
+        <td class="check">✓ Tam</td>
+        <td class="check">✓ + AI Yorum</td>
+      </tr>
+      <tr>
+        <td>Planlayıcılar (Tüm)</td>
+        <td class="partial">◐ 1 planlayıcı</td>
+        <td class="check">✓ Tümü</td>
+        <td class="check">✓ + Akıllı Plan</td>
+      </tr>
+      <tr>
+        <td>Medikal Terminal</td>
+        <td class="cross">✗</td>
+        <td class="check">✓ Tam</td>
+        <td class="check">✓ Tam</td>
+      </tr>
+      <tr>
+        <td>Gelişmiş AI Analitik & Raporlar</td>
+        <td class="cross">✗</td>
+        <td class="cross">✗</td>
+        <td class="check">✓ Tam</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="highlight-box" style="margin-top:24px">
+    <p>
+      <strong>Kural:</strong> Ücretsiz plan dönüşüm hunisinin giriş noktasıdır.
+      Temel modüllere sınırlı erişim sağlar — yeterince değer gösterip
+      <strong>yükseltmeye motive eder</strong>. Hiçbir modül tamamen gizlenmez;
+      kısıtlama limit ile sağlanır.
+    </p>
+  </div>
+</section>
+
+<!-- BÖLÜM 8: VERİ AKIŞI -->
+<section>
+  <div class="section-header">
+    <div class="section-number">08 — Veri Akışı</div>
+    <h2 class="section-title">Modüller Arası Veri Bağlantıları</h2>
+    <p class="section-desc">
+      MEDASI'da modüller izole çalışmaz; birbirinden beslenerek değer üretir.
+    </p>
+  </div>
+
+  <div class="data-flow">
+    <div class="df-card">
+      <div class="df-icon">🔄</div>
+      <div class="df-title">Hasta → Birden Fazla Modül</div>
+      <ul class="df-items">
+        <li>Hasta kaydı → Vakalar listesi</li>
+        <li>Hasta → Klinik notlar</li>
+        <li>Hasta → Lab görüntüleyici</li>
+        <li>Hasta → Reçete geçmişi</li>
+        <li>Hasta → AI tanı geçmişi</li>
+      </ul>
+    </div>
+    <div class="df-card">
+      <div class="df-icon">🧠</div>
+      <div class="df-title">AI Katmanı → Tüm Modüller</div>
+      <ul class="df-items">
+        <li>AI Asistan → Not editörü (içeri aktar)</li>
+        <li>AI Tanı → Vaka kaydı (otomatik doldur)</li>
+        <li>AI Flash Kart → Flash kart modülü</li>
+        <li>AI Soru → Soru bankası</li>
+        <li>AI Özet → Klinik not şablonu</li>
+      </ul>
+    </div>
+    <div class="df-card">
+      <div class="df-icon">📈</div>
+      <div class="df-title">Kullanım Verisi → Dashboard</div>
+      <ul class="df-items">
+        <li>Sınav sonuçları → Performans grafiği</li>
+        <li>Flash kart tekrarları → Streak takibi</li>
+        <li>Pomodoro oturumları → Odak süresi</li>
+        <li>AI kullanımı → Kota takibi</li>
+        <li>Hasta işlemleri → Klinik özet</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-brand"><span>MEDASI</span> Platform Dokümantasyonu</div>
+  <div class="footer-doc">Döküman Serisi 02 / 05 — Modül Mimarisi & Kullanıcı Akışları</div>
+  <div class="footer-page">medasi.com.tr</div>
+</div>
+
+</body>
+</html>

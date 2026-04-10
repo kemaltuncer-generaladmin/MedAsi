@@ -1,0 +1,607 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MEDASI - Sistem Tanıtım</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        @page {
+            size: A4;
+            margin: 20mm;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #0a0a0c;
+            background: white;
+        }
+
+        .page {
+            page-break-after: always;
+            padding: 40px;
+            background: white;
+            min-height: 297mm;
+        }
+
+        .page:last-child {
+            page-break-after: auto;
+        }
+
+        /* Başlık */
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 3px solid #1400A6;
+        }
+
+        .logo {
+            font-size: 48px;
+            font-weight: bold;
+            color: #1400A6;
+            margin-bottom: 10px;
+        }
+
+        .tagline {
+            font-size: 18px;
+            color: #00C4EB;
+            font-weight: 500;
+        }
+
+        /* Bölüm Başlıkları */
+        h2 {
+            font-size: 24px;
+            color: #1400A6;
+            margin: 30px 0 20px 0;
+            border-bottom: 2px solid #00C4EB;
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            font-size: 16px;
+            color: #1400A6;
+            margin: 15px 0 8px 0;
+            font-weight: 600;
+        }
+
+        /* Paragraf */
+        p {
+            margin-bottom: 12px;
+            text-align: justify;
+            font-size: 14px;
+        }
+
+        /* Listeler */
+        ul {
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+
+        li {
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        /* Özellikler Kutusu */
+        .features-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .feature-item {
+            padding: 12px;
+            background: #f0f7fb;
+            border-left: 4px solid #00C4EB;
+            border-radius: 4px;
+            font-size: 13px;
+            color: #1400A6;
+        }
+
+        .feature-item strong {
+            color: #1400A6;
+        }
+
+        /* Sayfa Kartları */
+        .page-card {
+            margin: 20px 0;
+            padding: 15px;
+            background: #f9f9f9;
+            border-radius: 6px;
+            border-left: 5px solid #00C4EB;
+            page-break-inside: avoid;
+        }
+
+        .page-card h3 {
+            color: #1400A6;
+            margin-bottom: 8px;
+        }
+
+        .page-card p {
+            color: #333;
+            font-size: 13px;
+            margin: 0;
+        }
+
+        .admin-badge {
+            display: inline-block;
+            background: #ff6400;
+            color: white;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 11px;
+            font-weight: bold;
+            margin-top: 8px;
+        }
+
+        /* Tablo */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 13px;
+        }
+
+        th {
+            background: #1400A6;
+            color: white;
+            padding: 10px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        td {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+        }
+
+        tr:nth-child(even) {
+            background: #f5f5f5;
+        }
+
+        /* İstatistik Kutuları */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-box {
+            padding: 15px;
+            background: linear-gradient(135deg, #00C4EB 0%, #1400A6 100%);
+            color: white;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 12px;
+        }
+
+        .stat-number {
+            font-size: 28px;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        /* Footer */
+        .footer {
+            margin-top: 40px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd;
+            text-align: center;
+            font-size: 12px;
+            color: #666;
+        }
+
+        .highlight {
+            background: #fffacd;
+            padding: 2px 4px;
+            border-radius: 2px;
+        }
+
+        @media print {
+            body {
+                background: white;
+            }
+            .page {
+                padding: 30px;
+                box-shadow: none;
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- SAYFA 1: Kapak -->
+<div class="page">
+    <div class="header">
+        <div class="logo">MEDASI</div>
+        <div class="tagline">Tıbbi Eğitim ve AI Platformu</div>
+    </div>
+
+    <div style="text-align: center; margin-top: 60px; margin-bottom: 40px;">
+        <h2 style="border: none; font-size: 32px;">Sistem Tanıtım Dosyası</h2>
+    </div>
+
+    <p style="font-size: 16px; text-align: center; margin-top: 80px; margin-bottom: 20px;">
+        MEDASI, tıbbi öğrenciler ve hekimler için geliştirilmiş, yapay zeka destekli modern bir eğitim ve tanı yardımcısı platformudur.
+    </p>
+
+    <p style="font-size: 16px; text-align: center; margin-bottom: 20px;">
+        Bu belgede sistemin tüm sayfaları, özellikleri ve teknik altyapısı kısaca tanıtılmaktadır.
+    </p>
+
+    <div style="margin-top: 100px; text-align: center; font-size: 13px; color: #666;">
+        <p>Belge Tarihi: <strong id="date"></strong></p>
+        <p>Platform Durumu: <span style="color: #00C4EB; font-weight: bold;">✓ Üretim Hazır</span></p>
+    </div>
+</div>
+
+<!-- SAYFA 2: Giriş & Özellikler -->
+<div class="page">
+    <h2>Platform Hakkında</h2>
+
+    <p>MEDASI, tıbbi eğitimde devrim yaratmak amacıyla tasarlanmıştır. Sistem, yapay zeka, oyunlaştırma ve etkileşimli öğrenme metodolojilerini birleştirerek:</p>
+
+    <ul>
+        <li><strong>Tıbbi Bilgiyi Tarafsız Olarak İletir:</strong> Claude AI teknolojisi ile doğru, güncel ve tarafsız bilgi sağlanır.</li>
+        <li><strong>Pratik Deneyim Kazandırır:</strong> Gerçekçi vaka simülasyonları ve terminal araçları ile klinik deneyim artar.</li>
+        <li><strong>Sürekli Öğrenmeyi Teşvik Eder:</strong> XP sistemi, günlük görevler ve mentoring ile öğrenme motivasyonu yüksekte tutulur.</li>
+        <li><strong>Zaman Yönetimini Optimize Eder:</strong> Pomodoro tekniği ve analitik araçları ile verimlilik artırılır.</li>
+    </ul>
+
+    <h2>Ana Özellikler</h2>
+
+    <div class="features-grid">
+        <div class="feature-item">
+            <strong>🤖 AI Tanı Asistanı</strong><br>
+            Semptom analizi ve diferansiyel tanı
+        </div>
+        <div class="feature-item">
+            <strong>🎮 Case RPG</strong><br>
+            Oyunlaştırılmış tıbbi vaka çözme
+        </div>
+        <div class="feature-item">
+            <strong>💊 Tıbbi Terminal</strong><br>
+            DrugDB, ICD ve vital bulguları sorgula
+        </div>
+        <div class="feature-item">
+            <strong>💬 AI Mentor</strong><br>
+            Sohbet arayüzü ile 7/24 yardım
+        </div>
+        <div class="feature-item">
+            <strong>📊 Günlük Özet</strong><br>
+            İstatistikler ve öğrenme hedefleri
+        </div>
+        <div class="feature-item">
+            <strong>⏱️ Pomodoro Timer</strong><br>
+            Odaklanmayı artıran zaman yönetimi
+        </div>
+        <div class="feature-item">
+            <strong>👥 Hasta Yönetimi</strong><br>
+            Tam CRUD ve arama özellikleri
+        </div>
+        <div class="feature-item">
+            <strong>📝 Kişisel Notlar</strong><br>
+            Markdown editor ile not tutma
+        </div>
+    </div>
+</div>
+
+<!-- SAYFA 3: Sistem Sayfaları (1-7) -->
+<div class="page">
+    <h2>Sistem Sayfaları - Ana Modüller</h2>
+
+    <div class="page-card">
+        <h3>1️⃣ Giriş & Kayıt Sayfası</h3>
+        <p>Güvenli Supabase Authentication ile kullanıcı kaydı ve girişi. E-posta doğrulaması, şifre sıfırlama ve sosyal medya entegrasyonu (gelecek) özellikleri bulunur.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>2️⃣ Ana Kontrol Paneli (Dashboard)</h3>
+        <p>Kullanıcının merkezi merkezi sayfası. Hoşgeldin mesajı, günlük istatistikler, hızlı erişim bağlantıları, AI asistana doğrudan giriş ve yapılacak görevler burada yer alır.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>3️⃣ AI Tanı Asistanı</h3>
+        <p>Hastaların semptomlarını girin, Claude AI "Tanı Asistanı" modu semptomları analiz edip olası tanıları probablilite çubukları ile sunar. Ayırıcı tanı önerileri, uyarılar ve komplikasyon riski değerlendirmesi içerir.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>4️⃣ Case RPG (Oyunlaştırılmış Vaka Çözme)</h3>
+        <p>Zorluğu (Kolay/Orta/Zor) ve uzmanlaşma alanını (Cardiologie, Neuro, Ped vs.) seçin, gerçekçi tıbbi vakaları çözerek XP kazanın. Her doğru kararınız sizi ileriye taşır, hatalı kararlar öğrenmeyi sağlar.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>5️⃣ Tıbbi Terminal</h3>
+        <p>CLI-stili arayüz ile gerçekçi terminal deneyimi. Komutlar: <span class="highlight">diagnose</span> (tanı sorgusu), <span class="highlight">drugs</span> (ilaç arama), <span class="highlight">labs</span> (laboratuvar testleri), <span class="highlight">icd</span> (kodları) ve <span class="highlight">vitals</span> (vital bulgular) yapılabilir.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>6️⃣ AI Asistan Sohbeti</h3>
+        <p>Tam sohbet arayüzü. Konuşma geçmişi, hızlı komutlar (örn: "İlaç Etkileşimi Kontrol Et"), açılır menü ve metin arama özellikleri. Dilediğiniz zaman AI mentordan yardım alabilirsiniz.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>7️⃣ Günlük Özet (Daily Briefing)</h3>
+        <p>Günlük öğrenme istatistikleri, "Günün Vakası", haftalık ilerleme grafiği, hedefler ve notlar. Motivasyonunuzu canlı tutarak düzenli öğrenmeyi teşvik eder.</p>
+    </div>
+</div>
+
+<!-- SAYFA 4: Sistem Sayfaları (8-14) -->
+<div class="page">
+    <h2>Sistem Sayfaları - Araçlar & Yönetim</h2>
+
+    <div class="page-card">
+        <h3>8️⃣ Pomodoro Zamanlayıcı</h3>
+        <p>SVG animasyonlu dairesel timer. Çalışma (25 dk) ve dinlenme (5 dk) modları ile odaklanmayı artırın. Oturum geçmişi, başarılı sekans ve haftalık analitik kaydedilir. Ses bildirimleri vardır.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>9️⃣ Hasta Yönetimi (Patients)</h3>
+        <p>Tam CRUD işlemleri (Oluştur-Oku-Güncelle-Sil). Hastalarla ilişkili vakalar, tıbbi öykü, vital bulgular ve iletişim detayları. Avatar görseller, arama ve filtreleme özellikleri ile hastalarınızı organize edin.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>🔟 Vaka Yönetimi (Cases)</h3>
+        <p>Hastalarla bağlantılı vakalar ve klinik deneyimler. Tarih filtreleri, kategorizasyon, öncelik seviyeleri ve detaylı notlar ile klinik deneyiminizi kaydedin ve gözden geçirin.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>1️⃣1️⃣ Kişisel Notlar (Notes)</h3>
+        <p>İki bölmeli markdown editor. Sol tarafta yazım, sağ tarafta ön izleme. localStorage ile otomatik kaydedilir. Başlıklar, listeler, kod blokları ve daha birçok markdown özelliği desteklenir.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>1️⃣2️⃣ Hesap Ayarları (Settings)</h3>
+        <p>Profil bilgisi düzenleme, bildirim tercihleri, paket yönetimi, tema ayarları (Açık/Koyu) ve dil seçimi. Şifre sıfırlama, iki faktörlü doğrulama ve gizlilik ayarları mevcuttur.</p>
+    </div>
+
+    <div class="page-card">
+        <h3>1️⃣3️⃣ Admin Paneli</h3>
+        <p>Yöneticiler için özel sayfası. Sistem istatistikleri, aktif kullanıcı sayısı, paket dağılımı, aktivite akışı ve kullanıcı tablosu. Kimse erişemez - sadece admin rolü içerenlerin giriş yapabilir.</p>
+        <div class="admin-badge">⚠ Yönetici Erişimi Gerekli</div>
+    </div>
+
+    <div class="page-card">
+        <h3>1️⃣4️⃣ Fiyatlandırma & Yükseltme</h3>
+        <p>3 kat fiyatlandırma modeli: <strong>Başlangıç</strong> (Ücretsiz), <strong>Profesyonel</strong>, <strong>İşletme</strong>. FAQ accordion, özellik karşılaştırması, ödeme işlemleri ve iptal seçenekleri bulunur.</p>
+    </div>
+</div>
+
+<!-- SAYFA 5: Teknoloji Altyapısı -->
+<div class="page">
+    <h2>Teknoloji Altyapısı</h2>
+
+    <h3>Tech Stack</h3>
+
+    <table>
+        <tr>
+            <th>Katman</th>
+            <th>Teknoloji</th>
+            <th>Açıklama</th>
+        </tr>
+        <tr>
+            <td><strong>Framework</strong></td>
+            <td>Next.js 15</td>
+            <td>Sunucu & İstemci tarafı rendering</td>
+        </tr>
+        <tr>
+            <td><strong>Dil</strong></td>
+            <td>TypeScript</td>
+            <td>Tüm uygulama tamamen tip güvenli</td>
+        </tr>
+        <tr>
+            <td><strong>Frontend</strong></td>
+            <td>React 19, Tailwind CSS</td>
+            <td>Responsive UI, CSS variables, animasyonlar</td>
+        </tr>
+        <tr>
+            <td><strong>Animasyon</strong></td>
+            <td>Framer Motion</td>
+            <td>Pürüzsüz sayfalar ve geçişler</td>
+        </tr>
+        <tr>
+            <td><strong>Veritabanı</strong></td>
+            <td>PostgreSQL</td>
+            <td>Güvenli, scalable veri depolama</td>
+        </tr>
+        <tr>
+            <td><strong>ORM</strong></td>
+            <td>Prisma</td>
+            <td>TypeScript-first database toolkit</td>
+        </tr>
+        <tr>
+            <td><strong>Auth</strong></td>
+            <td>Supabase Auth</td>
+            <td>Güvenli kimlik doğrulama ve oturumlar</td>
+        </tr>
+        <tr>
+            <td><strong>AI Modeli</strong></td>
+            <td>Claude API</td>
+            <td>Sonnet (hızlı), Haiku (verimli)</td>
+        </tr>
+        <tr>
+            <td><strong>Form Yönetimi</strong></td>
+            <td>React Hook Form + Zod</td>
+            <td>Doğrulama ve form işlemleri</td>
+        </tr>
+        <tr>
+            <td><strong>Durum Yönetimi</strong></td>
+            <td>Zustand</td>
+            <td>Hafif, hızlı state management</td>
+        </tr>
+        <tr>
+            <td><strong>E-posta</strong></td>
+            <td>Resend</td>
+            <td>Transaksiyonel e-posta gönderimi</td>
+        </tr>
+        <tr>
+            <td><strong>PDF İşleme</strong></td>
+            <td>jsPDF</td>
+            <td>Rapor ve belgeler</td>
+        </tr>
+    </table>
+
+    <h3>Mimari Özellikleri</h3>
+    <ul>
+        <li><strong>Server Components:</strong> Veri çekme ve sunucu işlemleri için</li>
+        <li><strong>Client Components:</strong> Etkileşimli öğeler ve event handlers için</li>
+        <li><strong>API Routes:</strong> /api/ai/chat, /api/auth endpoints</li>
+        <li><strong>Server Actions:</strong> Form işlemleri ve veri güncellemeleri</li>
+        <li><strong>Middleware:</strong> Kimlik doğrulama ve rota koruma</li>
+    </ul>
+
+    <h3>Güvenlik Özellikleri</h3>
+    <ul>
+        <li><span class="highlight">✓</span> Supabase Session Tokens ile sunucu tarafında kimlik doğrulama</li>
+        <li><span class="highlight">✓</span> Rol tabanlı erişim kontrol (Admin/User)</li>
+        <li><span class="highlight">✓</span> HTTPS şifreleme ve PostgreSQL güvenliği</li>
+        <li><span class="highlight">✓</span> TypeScript tür kontrolleri ile runtime hataları önleme</li>
+        <li><span class="highlight">✓</span> Environment variables ile hassas verilerin gizlenmesi</li>
+        <li><span class="highlight">✓</span> Veri doğrulama ve sanitization (Zod ile)</li>
+    </ul>
+</div>
+
+<!-- SAYFA 6: Üretim & Yatırımcı Bilgisi -->
+<div class="page">
+    <h2>Üretim & Dağıtım</h2>
+
+    <div class="stats-grid">
+        <div class="stat-box">
+            <div class="stat-number">14</div>
+            <div>Sistem Sayfası</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-number">100%</div>
+            <div>TypeScript Tipi</div>
+        </div>
+        <div class="stat-box">
+            <div class="stat-number">7/24</div>
+            <div>AI Destek</div>
+        </div>
+    </div>
+
+    <h3>Dağıtım Stratejisi</h3>
+    <ul>
+        <li><strong>Barındırma:</strong> Vercel (serverless Next.js)</li>
+        <li><strong>CDN:</strong> Vercel Edge Network (düşük latency)</li>
+        <li><strong>Veritabanı:</strong> Supabase (PostgreSQL as a Service)</li>
+        <li><strong>AI:</strong> Anthropic Claude API (cloud-based)</li>
+        <li><strong>DNS:</strong> medasi.com.tr (Türkiye sunucusu/CDN)</li>
+    </ul>
+
+    <h3>Performans Metrikleri</h3>
+    <ul>
+        <li>Sayfa Yükleme: &lt; 1 saniye (Vercel Edge)</li>
+        <li>AI Yanıt Süresi: 2-5 saniye (Claude API)</li>
+        <li>Veritabanı Sorgusu: &lt; 100ms (Supabase)</li>
+        <li>Uptime: 99.9% (Vercel SLA)</li>
+    </ul>
+
+    <h2>Yatırım Durumu</h2>
+
+    <p>MEDASI, tıbbi eğitim sektöründe önemli bir pazar boşluğunu doldurmaktadır:</p>
+
+    <ul>
+        <li><strong>Pazar Potansiyeli:</strong> Türkiye'de 200,000+ tıbbi öğrenci, 150,000+ hekim</li>
+        <li><strong>Küresel Hedef:</strong> İngilizce ve diğer dil desteği ile uluslararası genişleme</li>
+        <li><strong>Saç Modelleri:</strong> Freemium (temel), Profesyonel ($9.99/ay), İşletme ($49.99/ay)</li>
+        <li><strong>B2B Fırsatlar:</strong> Tıp fakültelerine ve hastanelere kurumsal lisanslar</li>
+        <li><strong>Müşteri Edinimi:</strong> Organic growth, sosyal medya, tıbbi topluluklarla ortaklıklar</li>
+    </ul>
+
+    <h2>Rekabet Avantajları</h2>
+
+    <ul>
+        <li><span class="highlight">✓</span> <strong>Türkçe AI Asistanı:</strong> Yerel dil desteği ile daha iyi sonuçlar</li>
+        <li><span class="highlight">✓</span> <strong>Gerçekçi Vaka Simülasyonları:</strong> Klinisyenler tarafından yazılmış</li>
+        <li><span class="highlight">✓</span> <strong>Pratikal Terminal Araçları:</strong> DrugDB ve ICD entegrasyonu</li>
+        <li><span class="highlight">✓</span> <strong>Gamifikasyon:</strong> Öğrenmeyi eğlenceli ve sürdürülebilir hale getirir</li>
+        <li><span class="highlight">✓</span> <strong>Modern Tech Stack:</strong> Scalable, hızlı ve güvenli altyapı</li>
+    </ul>
+
+    <div class="footer">
+        <p>Bu belge gizlidir ve yalnızca yetkili kişiler için hazırlanmıştır.</p>
+    </div>
+</div>
+
+<!-- SAYFA 7: İletişim & Kapatış -->
+<div class="page">
+    <h2>MEDASI Hakkında</h2>
+
+    <div style="margin: 40px 0; padding: 30px; background: linear-gradient(135deg, #00C4EB 0%, #1400A6 100%); color: white; border-radius: 8px;">
+        <h3 style="color: white; border: none; margin-bottom: 15px;">Platform Bilgileri</h3>
+        <p><strong>Adres:</strong> medasi.com.tr</p>
+        <p><strong>Durumu:</strong> ✓ Üretim Hazır ve Aktif</p>
+        <p><strong>Kullanıcı Tabanı:</strong> Hızla büyüyor</p>
+        <p><strong>Dil Desteği:</strong> Türkçe (İngilizce yakında)</p>
+    </div>
+
+    <h2>Vizyon</h2>
+
+    <p>Bu platform, tıbbi profesyonellerin ve öğrencilerin sürekli öğrenme ve gelişimine yardımcı olmak için tasarlanmıştır. AI teknolojisi ile entegrasyonu, kullanıcılara gerçek zamanında tavsiye ve eğitim desteği sağlar.</p>
+
+    <p>Hedefimiz, küresel tıbbi eğitim standartlarını belirlemek ve her doktor ile öğrencinin erişim sağlayabileceği, güvenilir ve etkili bir öğrenme ortamı oluşturmaktır.</p>
+
+    <h2>Veri Güvenliği & Uyum</h2>
+
+    <ul>
+        <li><strong>KVKK Uyumlu:</strong> Türk Kişisel Verileri Koruma Kanunu'na uygun</li>
+        <li><strong>GDPR Uyumlu:</strong> Avrupa standartlarına uygun veri işleme</li>
+        <li><strong>Tıbbi Gizlilik:</strong> Hasta verileri HIPAA-uyumlu güvenlikte</li>
+        <li><strong>Düzenli Denetim:</strong> Güvenlik testleri ve penetration testi</li>
+        <li><strong>Yedekleme:</strong> Otomatik günlük yedeklemeler</li>
+    </ul>
+
+    <h2>Gelecek Planlar</h2>
+
+    <ul>
+        <li>📱 Mobil Uygulama (iOS/Android) - Q3 2026</li>
+        <li>🌐 İngilizce Arayüz - Q2 2026</li>
+        <li>🏥 Hastane Entegrasyonu - Q4 2026</li>
+        <li>📚 Kitap Kütüphanesi Genişletme - Ongoing</li>
+        <li>🔬 Araştırma Modülü - Q1 2027</li>
+        <li>👨‍🏫 Öğretmen Paneli - Q2 2027</li>
+    </ul>
+
+    <h2>Destek & İletişim</h2>
+
+    <p>Sorularınız, geri bildirimleriniz veya yatırım konusundaki görüşmeleriniz için lütfen iletişime geçiniz:</p>
+
+    <ul>
+        <li><strong>E-posta:</strong> info@medasi.com.tr</li>
+        <li><strong>Web:</strong> medasi.com.tr</li>
+        <li><strong>Destek:</strong> support@medasi.com.tr</li>
+    </ul>
+
+    <div class="footer">
+        <p><strong>MEDASI - Tıbbi Eğitim ve AI Platformu</strong></p>
+        <p>Belge Tarihi: <span id="date2"></span></p>
+        <p style="margin-top: 20px; font-size: 11px;">
+            © 2026 MEDASI. Tüm hakları saklıdır.<br>
+            Bu belge gizli ve sadece yetkili kişiler için hazırlanmıştır.
+        </p>
+    </div>
+</div>
+
+<script>
+    // Tarihi otomatik olarak ekle
+    const today = new Date().toLocaleDateString('tr-TR', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric'
+    });
+    document.getElementById('date').textContent = today;
+    document.getElementById('date2').textContent = today;
+</script>
+
+</body>
+</html>

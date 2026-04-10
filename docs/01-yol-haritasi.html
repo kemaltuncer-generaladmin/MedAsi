@@ -1,0 +1,1003 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MEDASI — Zamansız Yol Haritası</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --cyan: #00C4EB;
+      --indigo: #1400A6;
+      --bg: #07070A;
+      --surface: #111117;
+      --surface2: #18181F;
+      --border: #252530;
+      --text: #E8E8F0;
+      --muted: #6B6B80;
+      --success: #22D3A0;
+      --warning: #F59E0B;
+      --danger: #EF4444;
+      --purple: #8B5CF6;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    /* ── PRINT ── */
+    @media print {
+      body { background: #fff; color: #111; }
+      .no-print { display: none; }
+      .phase-card { break-inside: avoid; }
+    }
+
+    /* ── COVER ── */
+    .cover {
+      background: linear-gradient(135deg, #07070A 0%, #0D0D1A 40%, #0A0520 100%);
+      border-bottom: 1px solid var(--border);
+      padding: 80px 60px 60px;
+      position: relative;
+      overflow: hidden;
+    }
+    .cover::before {
+      content: '';
+      position: absolute;
+      top: -100px; right: -100px;
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(0,196,235,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cover::after {
+      content: '';
+      position: absolute;
+      bottom: -80px; left: -80px;
+      width: 400px; height: 400px;
+      background: radial-gradient(circle, rgba(20,0,166,0.12) 0%, transparent 70%);
+      pointer-events: none;
+    }
+    .cover-tag {
+      display: inline-block;
+      background: rgba(0,196,235,0.1);
+      border: 1px solid rgba(0,196,235,0.3);
+      color: var(--cyan);
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      padding: 6px 14px;
+      border-radius: 4px;
+      margin-bottom: 24px;
+    }
+    .cover h1 {
+      font-size: 3.2rem;
+      font-weight: 900;
+      letter-spacing: -2px;
+      line-height: 1.1;
+      margin-bottom: 8px;
+    }
+    .cover h1 .brand { color: var(--cyan); }
+    .cover h1 .sep { color: var(--muted); font-weight: 300; }
+    .cover-subtitle {
+      font-size: 1.2rem;
+      color: var(--muted);
+      font-weight: 400;
+      margin-bottom: 32px;
+      max-width: 600px;
+    }
+    .cover-meta {
+      display: flex;
+      gap: 32px;
+      flex-wrap: wrap;
+    }
+    .cover-meta-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .cover-meta-label {
+      font-size: 11px;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+    }
+    .cover-meta-value {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    /* ── LAYOUT ── */
+    .container {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding: 0 60px;
+    }
+
+    section {
+      padding: 64px 60px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* ── SECTION HEADER ── */
+    .section-header {
+      margin-bottom: 40px;
+    }
+    .section-number {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 3px;
+      color: var(--cyan);
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+    .section-title {
+      font-size: 1.8rem;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    .section-desc {
+      font-size: 15px;
+      color: var(--muted);
+      max-width: 640px;
+      line-height: 1.8;
+    }
+
+    /* ── VISION PILLARS ── */
+    .pillars {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      margin-bottom: 48px;
+    }
+    .pillar {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 24px;
+      position: relative;
+      overflow: hidden;
+    }
+    .pillar::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+    }
+    .pillar.cyan::before { background: var(--cyan); }
+    .pillar.indigo::before { background: var(--indigo); }
+    .pillar.purple::before { background: var(--purple); }
+    .pillar.success::before { background: var(--success); }
+    .pillar.warning::before { background: var(--warning); }
+    .pillar.danger::before { background: var(--danger); }
+
+    .pillar-icon {
+      font-size: 28px;
+      margin-bottom: 14px;
+    }
+    .pillar-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .pillar-text {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    /* ── PHASE TIMELINE ── */
+    .timeline {
+      position: relative;
+      padding-left: 32px;
+    }
+    .timeline::before {
+      content: '';
+      position: absolute;
+      left: 10px; top: 0; bottom: 0;
+      width: 2px;
+      background: linear-gradient(to bottom, var(--cyan), var(--indigo), var(--purple));
+      border-radius: 2px;
+    }
+
+    .phase-card {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 28px 28px 28px 32px;
+      margin-bottom: 24px;
+    }
+    .phase-card::before {
+      content: '';
+      position: absolute;
+      left: -28px; top: 32px;
+      width: 14px; height: 14px;
+      border-radius: 50%;
+      background: var(--surface);
+      border: 3px solid var(--cyan);
+      z-index: 1;
+    }
+    .phase-card.phase-2::before { border-color: var(--indigo); }
+    .phase-card.phase-3::before { border-color: var(--success); }
+    .phase-card.phase-4::before { border-color: var(--purple); }
+    .phase-card.phase-5::before { border-color: var(--warning); }
+    .phase-card.phase-6::before { border-color: var(--danger); }
+
+    .phase-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      margin-bottom: 16px;
+      gap: 16px;
+    }
+    .phase-title-group {}
+    .phase-tag {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--cyan);
+      margin-bottom: 4px;
+    }
+    .phase-2 .phase-tag { color: #6B8AFF; }
+    .phase-3 .phase-tag { color: var(--success); }
+    .phase-4 .phase-tag { color: var(--purple); }
+    .phase-5 .phase-tag { color: var(--warning); }
+    .phase-6 .phase-tag { color: var(--danger); }
+
+    .phase-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      letter-spacing: -0.3px;
+    }
+    .phase-badge {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      white-space: nowrap;
+      flex-shrink: 0;
+    }
+    .phase-desc {
+      font-size: 14px;
+      color: var(--muted);
+      margin-bottom: 20px;
+      line-height: 1.7;
+    }
+    .phase-features {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+    }
+    .phase-feature {
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+    .phase-feature .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--cyan);
+      margin-top: 5px;
+      flex-shrink: 0;
+    }
+    .phase-2 .phase-feature .dot { background: #6B8AFF; }
+    .phase-3 .phase-feature .dot { background: var(--success); }
+    .phase-4 .phase-feature .dot { background: var(--purple); }
+    .phase-5 .phase-feature .dot { background: var(--warning); }
+    .phase-6 .phase-feature .dot { background: var(--danger); }
+
+    /* ── PRINCIPLE CARDS ── */
+    .principles {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+    }
+    .principle-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .principle-number {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .principle-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+    .principle-text {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+    }
+
+    /* ── METRIC GRID ── */
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 40px;
+    }
+    .metric-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+    }
+    .metric-value {
+      font-size: 1.8rem;
+      font-weight: 900;
+      letter-spacing: -1px;
+      color: var(--cyan);
+      margin-bottom: 4px;
+    }
+    .metric-label {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.4;
+    }
+
+    /* ── AUDIENCE CARDS ── */
+    .audiences {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+    .audience-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .audience-icon { font-size: 32px; margin-bottom: 14px; }
+    .audience-title {
+      font-size: 15px;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .audience-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.7;
+      margin-bottom: 16px;
+    }
+    .audience-needs {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .audience-needs li {
+      font-size: 12px;
+      color: var(--text);
+      padding-left: 16px;
+      position: relative;
+    }
+    .audience-needs li::before {
+      content: '→';
+      position: absolute;
+      left: 0;
+      color: var(--cyan);
+    }
+
+    /* ── MANIFESTO ── */
+    .manifesto {
+      background: linear-gradient(135deg, rgba(0,196,235,0.06) 0%, rgba(20,0,166,0.06) 100%);
+      border: 1px solid rgba(0,196,235,0.15);
+      border-radius: 16px;
+      padding: 48px;
+      text-align: center;
+    }
+    .manifesto-quote {
+      font-size: 1.4rem;
+      font-weight: 700;
+      line-height: 1.6;
+      margin-bottom: 20px;
+      letter-spacing: -0.3px;
+    }
+    .manifesto-quote em {
+      font-style: normal;
+      color: var(--cyan);
+    }
+    .manifesto-sub {
+      font-size: 14px;
+      color: var(--muted);
+      max-width: 560px;
+      margin: 0 auto;
+      line-height: 1.8;
+    }
+
+    /* ── FOOTER ── */
+    .footer {
+      padding: 32px 60px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-top: 1px solid var(--border);
+    }
+    .footer-brand {
+      font-size: 16px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+    }
+    .footer-brand span { color: var(--cyan); }
+    .footer-doc {
+      font-size: 12px;
+      color: var(--muted);
+    }
+    .footer-page {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      height: 1px;
+      background: linear-gradient(to right, transparent, var(--border), transparent);
+      margin: 32px 0;
+    }
+
+    /* ── HIGHLIGHT BOX ── */
+    .highlight-box {
+      background: rgba(0,196,235,0.06);
+      border: 1px solid rgba(0,196,235,0.2);
+      border-left: 4px solid var(--cyan);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin: 24px 0;
+    }
+    .highlight-box p {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text);
+    }
+    .highlight-box strong { color: var(--cyan); }
+
+    /* ── NORTH STAR ── */
+    .north-star {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 24px;
+      margin-top: 32px;
+    }
+    .north-star-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+    }
+    .north-star-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 12px;
+    }
+    .north-star-text {
+      font-size: 15px;
+      font-weight: 600;
+      line-height: 1.6;
+    }
+    .north-star-sub {
+      font-size: 13px;
+      color: var(--muted);
+      margin-top: 8px;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+
+<!-- COVER -->
+<div class="cover">
+  <div class="cover-tag">Döküman Serisi / 01</div>
+  <h1>
+    <span class="brand">MEDASI</span>
+    <span class="sep"> — </span>
+    Zamansız Yol Haritası
+  </h1>
+  <p class="cover-subtitle">
+    Nereye gittiğimizi değil, <em>neden</em> gittiğimizi anlatan strateji belgesi.
+    Faz bağımsız, vizyon odaklı, kalıcı prensipler.
+  </p>
+  <div class="cover-meta">
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Platform</span>
+      <span class="cover-meta-value">medasi.com.tr</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Seri</span>
+      <span class="cover-meta-value">01 / 05</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Konu</span>
+      <span class="cover-meta-value">Vizyon & Yol Haritası</span>
+    </div>
+    <div class="cover-meta-item">
+      <span class="cover-meta-label">Versiyon</span>
+      <span class="cover-meta-value">v1.0</span>
+    </div>
+  </div>
+</div>
+
+<!-- BÖLÜM 1: VİZYON MANİFESTOSU -->
+<section>
+  <div class="section-header">
+    <div class="section-number">01 — Vizyon</div>
+    <h2 class="section-title">Neden MEDASI?</h2>
+    <p class="section-desc">
+      Türkiye'de tıp eğitimi ve klinik pratik, yapay zekanın sağladığı imkânların çok
+      gerisinde seyrediyor. MEDASI bu boşluğu kapatmak için değil, yeni bir standart
+      kurmak için var.
+    </p>
+  </div>
+
+  <div class="manifesto">
+    <div class="manifesto-quote">
+      "Bir tıp öğrencisinin <em>her sorusunun karşılığını bulduğu</em>,
+      bir doktorun <em>düşünce sürecinin ortağı</em> olan
+      bir platform inşa ediyoruz."
+    </div>
+    <p class="manifesto-sub">
+      MEDASI; öğrenme, teşhis, pratik ve yönetimi tek çatı altında birleştiren
+      Türkiye'nin ilk bütünleşik tıbbi yapay zeka platformudur.
+      Hedefimiz yalnızca bir araç olmak değil, <strong style="color:var(--cyan)">tıbbi düşünceyi dönüştürmek</strong>tir.
+    </p>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="pillars">
+    <div class="pillar cyan">
+      <div class="pillar-icon">🎓</div>
+      <div class="pillar-title">Eğitim Katmanı</div>
+      <div class="pillar-text">TUS hazırlığından OSCE pratiğine, flash kartlardan yapay zeka destekli soru üretimine uzanan eksiksiz bir öğrenme ekosistemi.</div>
+    </div>
+    <div class="pillar indigo">
+      <div class="pillar-icon">🧠</div>
+      <div class="pillar-title">Klinik Zeka</div>
+      <div class="pillar-text">Semptomdan diferansiyel tanıya, vaka simülasyonundan gerçek hasta yönetimine kadar yapay zeka destekli karar destek sistemi.</div>
+    </div>
+    <div class="pillar purple">
+      <div class="pillar-icon">🏥</div>
+      <div class="pillar-title">Klinik Yönetim</div>
+      <div class="pillar-text">Hasta takibi, klinik notlar, reçete, tahlil görüntüleme ve staj planlayıcısını kapsayan pratik klinik araçlar paketi.</div>
+    </div>
+    <div class="pillar success">
+      <div class="pillar-icon">📊</div>
+      <div class="pillar-title">Performans İzleme</div>
+      <div class="pillar-text">Günlük brifing, pomodoro entegrasyonu ve hedef takibi ile öğrencinin ve doktorun ilerleme verisi görünür kılınır.</div>
+    </div>
+    <div class="pillar warning">
+      <div class="pillar-icon">🌍</div>
+      <div class="pillar-title">Global Ölçek</div>
+      <div class="pillar-text">Türkiye'den başlayıp MENA ve Orta Asya tıp pazarlarına açılmayı hedefleyen uluslararası ürün mimarisi.</div>
+    </div>
+    <div class="pillar danger">
+      <div class="pillar-icon">🔒</div>
+      <div class="pillar-title">Güven & Güvenlik</div>
+      <div class="pillar-text">Klinik veri gizliliği, KVKK uyumluluğu ve tıbbi içerik doğruluğu platforma entegre edilmiş değil, temel mimarinin parçasıdır.</div>
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 2: HEDEF KİTLE -->
+<section>
+  <div class="section-header">
+    <div class="section-number">02 — Hedef Kitle</div>
+    <h2 class="section-title">Kimi Dönüştürüyoruz?</h2>
+    <p class="section-desc">
+      MEDASI tek bir kullanıcı tipi için değil, tıbbın farklı evrelerindeki
+      üç kritik profil için tasarlandı.
+    </p>
+  </div>
+
+  <div class="audiences">
+    <div class="audience-card">
+      <div class="audience-icon">📚</div>
+      <div class="audience-title">Tıp Öğrencisi</div>
+      <div class="audience-desc">
+        Preklinikten kliniğe geçişte, TUS hazırlığında ve
+        staj döneminde yoğun bilgi işleme ihtiyacı olan
+        1–6. sınıf öğrencileri.
+      </div>
+      <ul class="audience-needs">
+        <li>TUS soru bankası ve AI destekli soru üretimi</li>
+        <li>Flash kart ve spot not sistemi</li>
+        <li>OSCE, kuramsal, sözlü sınav simülatörleri</li>
+        <li>Ders ve TUS planlayıcıları</li>
+        <li>Günlük öğrenme takibi</li>
+      </ul>
+    </div>
+    <div class="audience-card">
+      <div class="audience-icon">🩺</div>
+      <div class="audience-title">İntern & Asistan Doktor</div>
+      <div class="audience-desc">
+        Klinik kararların hızlandığı, hasta yükünün
+        yoğun olduğu ve hem öğrenmenin hem pratiğin
+        eş zamanlı sürdüğü kritik geçiş dönemi.
+      </div>
+      <ul class="audience-needs">
+        <li>AI destekli diferansiyel tanı asistanı</li>
+        <li>Hasta yönetimi ve klinik notlar</li>
+        <li>İlaç rehberi ve tahlil görüntüleyici</li>
+        <li>Staj ve intern planlayıcısı</li>
+        <li>Vaka RPG ile pratik simülasyon</li>
+      </ul>
+    </div>
+    <div class="audience-card">
+      <div class="audience-icon">👨‍⚕️</div>
+      <div class="audience-title">Pratisyen & Uzman Hekim</div>
+      <div class="audience-desc">
+        Günlük pratikte karar destek, hasta takibi ve
+        sürekli mesleki gelişim ihtiyacı duyan
+        aktif klinisyenler.
+      </div>
+      <ul class="audience-needs">
+        <li>AI klinik asistan ve danışma</li>
+        <li>Hasta ve vaka yönetimi</li>
+        <li>Klinik not ve reçete sistemi</li>
+        <li>Lab görüntüleme ve yorum desteği</li>
+        <li>Dijital cüzdan ve abonelik yönetimi</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 3: ZAMANSIZ PRENSIPLER -->
+<section>
+  <div class="section-header">
+    <div class="section-number">03 — Prensipler</div>
+    <h2 class="section-title">Değişmeyecek Olan Nedir?</h2>
+    <p class="section-desc">
+      Teknoloji değişir, modeller güncellenir, özellikler eklenir.
+      Ama bu sekiz prensip MEDASI'nın özünde her zaman sabit kalır.
+    </p>
+  </div>
+
+  <div class="principles">
+    <div class="principle-card">
+      <div class="principle-number">P-01</div>
+      <div class="principle-title">Klinisyen Önce</div>
+      <div class="principle-text">Her ürün kararı, klinisyenin ya da öğrencinin iş akışını gerçekten iyileştirip iyileştirmediği sorusuyla test edilir. Teknoloji için teknoloji üretilmez.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-02</div>
+      <div class="principle-title">AI Ortak, AI Otorite Değil</div>
+      <div class="principle-text">Yapay zeka bir düşünce ortağıdır, karar mercii değil. Kullanıcı her zaman son kararı veren konumdadır. Platform bunu hiçbir zaman tersine çevirmez.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-03</div>
+      <div class="principle-title">Sadelik Güçtür</div>
+      <div class="principle-text">Özellik enflasyonu bir kalite göstergesi değildir. Her eklenecek modül "Bu olmazsa eksik mi kalır?" sorusuyla süzgeçten geçirilir.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-04</div>
+      <div class="principle-title">Veri Gizliliği Tasarımda</div>
+      <div class="principle-text">KVKK ve GDPR uyumu, güvenlik yamaları sonradan eklenmez; mimari başından bu bilinçle kurulur. Hasta verisi asla üçüncü tarafla paylaşılmaz.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-05</div>
+      <div class="principle-title">Ölçülebilir Etki</div>
+      <div class="principle-text">Her modülün kullanıcıya sağladığı fayda ölçülür. Yalnızca aktivasyon metriği değil; öğrenmede ilerleme, tanıda güven artışı izlenir.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-06</div>
+      <div class="principle-title">Modüler Büyüme</div>
+      <div class="principle-text">Platform, bütün olarak büyüdüğü kadar her modül de bağımsız olarak mükemmelleştirilebilir olmalıdır. Monolitik büyüme bir tuzaktır.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-07</div>
+      <div class="principle-title">Türkçe Önce, Global Hazır</div>
+      <div class="principle-text">İçerik ve deneyim Türk tıp sistemine özgün biçimde tasarlanır; ancak mimari uluslararasılaşmaya hazır tutulur. Lokalizasyon sonradan eklenen bir katman değildir.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">P-08</div>
+      <div class="principle-title">Güvenilirlik Hız Kadar Önemli</div>
+      <div class="principle-text">Tıbbi bir platformda kesinti veya yanlış bilgi üretimi kabul edilemez bir risktir. Güvenilirlik metrikleri hız ve büyüme metrikleri kadar öncelikli izlenir.</div>
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 4: GELİŞİM FAZLARI -->
+<section>
+  <div class="section-header">
+    <div class="section-number">04 — Gelişim Fazları</div>
+    <h2 class="section-title">Büyüme Yolculuğu</h2>
+    <p class="section-desc">
+      MEDASI'nın yol haritası takvime değil, değer üretim olgunluğuna bağlıdır.
+      Her faz, bir öncekinin üzerine sağlam adımlar atarak ilerler.
+    </p>
+  </div>
+
+  <div class="highlight-box">
+    <p>
+      <strong>Not:</strong> Aşağıdaki fazlar kronolojik tarih sırasıyla değil,
+      <strong>olgunluk seviyesine</strong> göre tanımlanmıştır. Her faz, önceki fazın
+      belirli bir kalite eşiğini aşması ile başlar. Bu "zamansız" yaklaşım,
+      piyasa koşullarına ve kullanıcı geri bildirimlerine adaptasyona olanak tanır.
+    </p>
+  </div>
+
+  <div class="timeline">
+
+    <div class="phase-card">
+      <div class="phase-header">
+        <div class="phase-title-group">
+          <div class="phase-tag">FAZ 1 — TEMEL</div>
+          <div class="phase-title">Platform Altyapısı & Çekirdek Modüller</div>
+        </div>
+        <div class="phase-badge">Başlangıç Noktası</div>
+      </div>
+      <div class="phase-desc">
+        Platformun teknik omurgasının kurulduğu, kimlik doğrulama, abonelik yönetimi
+        ve temel AI entegrasyonunun hayata geçtiği başlangıç fazıdır. Bu fazda
+        kullanıcı onboarding'i optimize edilir ve ilk gerçek kullanıcı verileri toplanır.
+      </div>
+      <div class="phase-features">
+        <div class="phase-feature"><span class="dot"></span>Supabase Auth + kayıt / giriş / e-posta doğrulama</div>
+        <div class="phase-feature"><span class="dot"></span>Üç katmanlı abonelik sistemi (Ücretsiz / Standart / Pro)</div>
+        <div class="phase-feature"><span class="dot"></span>AI Asistan — genel tıbbi sohbet arayüzü</div>
+        <div class="phase-feature"><span class="dot"></span>Dashboard — günlük brifing ve hedef takibi</div>
+        <div class="phase-feature"><span class="dot"></span>Temel hasta ve vaka yönetimi</div>
+        <div class="phase-feature"><span class="dot"></span>Pomodoro ve öğrenme planlayıcıları</div>
+        <div class="phase-feature"><span class="dot"></span>Flash kart ve not sistemi</div>
+        <div class="phase-feature"><span class="dot"></span>Admin paneli ve kullanıcı yönetimi</div>
+      </div>
+    </div>
+
+    <div class="phase-card phase-2">
+      <div class="phase-header">
+        <div class="phase-title-group">
+          <div class="phase-tag">FAZ 2 — DERİNLEŞME</div>
+          <div class="phase-title">AI Zeka Katmanının Güçlendirilmesi</div>
+        </div>
+        <div class="phase-badge">Ürün–Pazar Uyumu</div>
+      </div>
+      <div class="phase-desc">
+        Çekirdek modüllerin kullanıcı geri bildirimleriyle rafine edildiği, AI destekli
+        içeriklerin zenginleştirildiği ve platforma özgü büyük veri setlerinin oluşturulmaya
+        başlandığı derinleşme fazıdır.
+      </div>
+      <div class="phase-features">
+        <div class="phase-feature"><span class="dot"></span>AI diferansiyel tanı motoru v2 — çok adımlı muhakeme</div>
+        <div class="phase-feature"><span class="dot"></span>Gerçek zamanlı AI streaming yanıtları</div>
+        <div class="phase-feature"><span class="dot"></span>Kişiselleştirilmiş öğrenme yolu önerileri</div>
+        <div class="phase-feature"><span class="dot"></span>TUS soru bankası — AI ile soru üretimi ve açıklama</div>
+        <div class="phase-feature"><span class="dot"></span>Vaka RPG — genişletilmiş senaryo kütüphanesi</div>
+        <div class="phase-feature"><span class="dot"></span>Klinik not AI özetleme ve şablonlar</div>
+        <div class="phase-feature"><span class="dot"></span>Lab sonuç yorumlama asistanı</div>
+        <div class="phase-feature"><span class="dot"></span>Kullanıcı performans analitikleri</div>
+      </div>
+    </div>
+
+    <div class="phase-card phase-3">
+      <div class="phase-header">
+        <div class="phase-title-group">
+          <div class="phase-tag">FAZ 3 — BÜYÜME</div>
+          <div class="phase-title">Topluluk, İçerik & Ölçek</div>
+        </div>
+        <div class="phase-badge">Viral Büyüme Kapısı</div>
+      </div>
+      <div class="phase-desc">
+        Platforma topluluk dinamiklerinin ekleneceği, içerik üretiminin demokratize
+        edileceği ve ölçeklenme için kurumsal kanal açılışlarının gerçekleşeceği büyüme fazıdır.
+      </div>
+      <div class="phase-features">
+        <div class="phase-feature"><span class="dot"></span>Tıp fakültesi kurumsal lisans paketi</div>
+        <div class="phase-feature"><span class="dot"></span>Öğrenci topluluğu ve içerik paylaşımı</div>
+        <div class="phase-feature"><span class="dot"></span>Hoca / mentor içerik ekleme araçları</div>
+        <div class="phase-feature"><span class="dot"></span>Kohorta özel performans raporlaması</div>
+        <div class="phase-feature"><span class="dot"></span>Mobil uygulama (iOS / Android)</div>
+        <div class="phase-feature"><span class="dot"></span>Bildirim ve hatırlatma sistemi</div>
+        <div class="phase-feature"><span class="dot"></span>API açık erişim — partner entegrasyonları</div>
+        <div class="phase-feature"><span class="dot"></span>Gelişmiş analitik dashboard</div>
+      </div>
+    </div>
+
+    <div class="phase-card phase-4">
+      <div class="phase-header">
+        <div class="phase-title-group">
+          <div class="phase-tag">FAZ 4 — İNTİBAS</div>
+          <div class="phase-title">Kliniklere Özel Entegrasyonlar</div>
+        </div>
+        <div class="phase-badge">Kurumsal Geçiş</div>
+      </div>
+      <div class="phase-desc">
+        MEDASI'nın bireysel kullanıcı platformundan klinik yönetim sistemlerine
+        entegre olabilen kurumsal bir çözüme dönüşeceği kritik büyüme noktası.
+      </div>
+      <div class="phase-features">
+        <div class="phase-feature"><span class="dot"></span>HIS / HBYS entegrasyon katmanı</div>
+        <div class="phase-feature"><span class="dot"></span>FHIR uyumlu veri modeli</div>
+        <div class="phase-feature"><span class="dot"></span>Çok kullanıcılı klinik workspace</div>
+        <div class="phase-feature"><span class="dot"></span>SSO ve kurumsal kimlik yönetimi</div>
+        <div class="phase-feature"><span class="dot"></span>Özel model fine-tuning (klinik verisine göre)</div>
+        <div class="phase-feature"><span class="dot"></span>SLA garantili kurumsal destek</div>
+        <div class="phase-feature"><span class="dot"></span>On-premise deployment seçeneği</div>
+        <div class="phase-feature"><span class="dot"></span>Klinik KPI raporlama ve denetim izleri</div>
+      </div>
+    </div>
+
+    <div class="phase-card phase-5">
+      <div class="phase-header">
+        <div class="phase-title-group">
+          <div class="phase-tag">FAZ 5 — ULUSLARARASI</div>
+          <div class="phase-title">MENA & Orta Asya Açılımı</div>
+        </div>
+        <div class="phase-badge">Global Vizyon</div>
+      </div>
+      <div class="phase-desc">
+        Türkiye'de kanıtlanmış ürünün bölgesel pazarlara uyarlandığı ve yeni gelir
+        akışlarının açıldığı uluslararasılaşma fazı. Her pazar kendi tıp eğitimi
+        sistemine göre özelleştirilmiş içerik ve arayüz alır.
+      </div>
+      <div class="phase-features">
+        <div class="phase-feature"><span class="dot"></span>Arapça, Rusça, Farsça lokalizasyon</div>
+        <div class="phase-feature"><span class="dot"></span>Ülkeye özgü sınav modülleri (USMLE, PLAB vb.)</div>
+        <div class="phase-feature"><span class="dot"></span>Bölgesel içerik ortaklıkları</div>
+        <div class="phase-feature"><span class="dot"></span>Çoklu para birimi ve yerel ödeme yöntemleri</div>
+        <div class="phase-feature"><span class="dot"></span>Bölgesel veri merkezi uyumu (GDPR / lokal)</div>
+        <div class="phase-feature"><span class="dot"></span>Uluslararası tıp kuruluşu ortaklıkları</div>
+        <div class="phase-feature"><span class="dot"></span>Global AI model çeşitlendirmesi</div>
+        <div class="phase-feature"><span class="dot"></span>Çok dilli soru bankası altyapısı</div>
+      </div>
+    </div>
+
+    <div class="phase-card phase-6">
+      <div class="phase-header">
+        <div class="phase-title-group">
+          <div class="phase-tag">FAZ 6 — PLATFORM EKOSİSTEMİ</div>
+          <div class="phase-title">Açık Platform & Yapay Zeka Marketi</div>
+        </div>
+        <div class="phase-badge">Uzun Vadeli Vizyon</div>
+      </div>
+      <div class="phase-desc">
+        MEDASI'nın yalnızca bir SaaS ürünü olmaktan çıkıp üçüncü taraf geliştiricilerin,
+        içerik üreticilerinin ve tıbbi AI şirketlerinin üzerine inşa edebildiği
+        bir platform ekosistemi haline geldiği nihai vizyon.
+      </div>
+      <div class="phase-features">
+        <div class="phase-feature"><span class="dot"></span>MEDASI App Store — üçüncü taraf tıbbi araçlar</div>
+        <div class="phase-feature"><span class="dot"></span>Geliştirici API & SDK ekosistemi</div>
+        <div class="phase-feature"><span class="dot"></span>AI model marketi — özelleştirilmiş modeller</div>
+        <div class="phase-feature"><span class="dot"></span>İçerik üretici ekonomisi ve gelir paylaşımı</div>
+        <div class="phase-feature"><span class="dot"></span>Federe öğrenme altyapısı (gizlilik korumalı)</div>
+        <div class="phase-feature"><span class="dot"></span>Tıbbi araştırma veri havuzu (anonim)</div>
+        <div class="phase-feature"><span class="dot"></span>Gerçek zamanlı tıp literatürü entegrasyonu</div>
+        <div class="phase-feature"><span class="dot"></span>Kurumsal veri analizi ve benchmark hizmeti</div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- BÖLÜM 5: KUZEYYILDIZı -->
+<section>
+  <div class="section-header">
+    <div class="section-number">05 — Kuzey Yıldızı</div>
+    <h2 class="section-title">Başarıyı Nasıl Tanımlıyoruz?</h2>
+    <p class="section-desc">
+      Büyüme rakamları önemlidir ama MEDASI için asıl başarı metriği
+      kullanıcının gerçek hayattaki dönüşümüdür.
+    </p>
+  </div>
+
+  <div class="metrics">
+    <div class="metric-card">
+      <div class="metric-value">+40%</div>
+      <div class="metric-label">TUS başarı oranı artışı (hedef kullanıcı grubu)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">3x</div>
+      <div class="metric-label">Tanı kararına ulaşma hızı (AI asistan ile)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">90%</div>
+      <div class="metric-label">Kullanıcı memnuniyeti ve tavsiye oranı (NPS)</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-value">&lt;2sn</div>
+      <div class="metric-label">AI yanıt süresi hedefi (tüm kritik modüller)</div>
+    </div>
+  </div>
+
+  <div class="north-star">
+    <div class="north-star-item">
+      <div class="north-star-label">Öğrenci için başarı</div>
+      <div class="north-star-text">TUS'a girdiğinde kendine güvenli, sınava hazır, AI'yı doğru kullanan bir klinisyen adayı olmak.</div>
+      <div class="north-star-sub">Ölçüm: Sınav simülasyonu başarı trendi, günlük aktif çalışma süresi, hedef tamamlama oranı.</div>
+    </div>
+    <div class="north-star-item">
+      <div class="north-star-label">Doktor için başarı</div>
+      <div class="north-star-text">Günlük pratikte daha az bilişsel yük, daha hızlı karar, daha iyi dokümantasyon.</div>
+      <div class="north-star-sub">Ölçüm: AI asistan kullanım sıklığı, klinik not oluşturma süresi, hasta takip düzenliliği.</div>
+    </div>
+    <div class="north-star-item">
+      <div class="north-star-label">Platform için başarı</div>
+      <div class="north-star-text">Türkiye'de tıbbi AI'ın referans noktası; MENA'da büyüyen bir kullanıcı tabanı.</div>
+      <div class="north-star-sub">Ölçüm: MAU büyümesi, abonelik dönüşüm oranı, kurumsal müşteri sayısı.</div>
+    </div>
+    <div class="north-star-item">
+      <div class="north-star-label">Ekosistem için başarı</div>
+      <div class="north-star-text">Üçüncü tarafların ve araştırmacıların üzerine inşa ettiği, açık bir tıbbi AI altyapısı.</div>
+      <div class="north-star-sub">Ölçüm: API kullanan partner sayısı, üretilen içerik hacmi, akademik atıf ve ortaklıklar.</div>
+    </div>
+  </div>
+</section>
+
+<!-- BÖLÜM 6: STRATEJİK FARKLILASMA -->
+<section>
+  <div class="section-header">
+    <div class="section-number">06 — Stratejik Konum</div>
+    <h2 class="section-title">Rakiplerden Ne Fark Eder?</h2>
+    <p class="section-desc">
+      MEDASI'nın rekabetçi avantajı tek bir özellikten değil,
+      bütünleşik yaklaşımın yarattığı sistemik değerden gelir.
+    </p>
+  </div>
+
+  <div class="principles">
+    <div class="principle-card">
+      <div class="principle-number">FARK-01</div>
+      <div class="principle-title">Dikey Bütünleşme</div>
+      <div class="principle-text">Rakipler ya sadece eğitim (Anki, Osmosis) ya da sadece klinik karar desteği (UpToDate) sunar. MEDASI ikisini tek platformda, birbirini besleyen bir döngüde birleştirir.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">FARK-02</div>
+      <div class="principle-title">Türk Tıp Sistemine Özgünlük</div>
+      <div class="principle-text">TUS müfredatı, Türk tıp eğitim sistemi, HBYS entegrasyonu ve yerel klinik protokollerine uygun içerik, global rakiplerin çoğaltamadığı bir yerel avantaj yaratır.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">FARK-03</div>
+      <div class="principle-title">Öğrenciden Uzman Hekime Yaşam Boyu Değer</div>
+      <div class="principle-text">Kullanıcı tıp öğrencisiyken platforma başlar, intern döneminde devam eder, uzman olduğunda klinik araçlarıyla kalır. Churn yerine büyüyen kullanıcı değeri hedeflenir.</div>
+    </div>
+    <div class="principle-card">
+      <div class="principle-number">FARK-04</div>
+      <div class="principle-title">AI-First, AI-Only Değil</div>
+      <div class="principle-text">Yapay zeka yalnızca arka planda çalışan bir özellik değil, deneyimin merkezi ögesidir. Ancak AI bağımsız çalışamadığında bile platform değer üretmeye devam eder.</div>
+    </div>
+  </div>
+
+  <div class="highlight-box" style="margin-top:32px">
+    <p>
+      <strong>Sonuç:</strong> MEDASI bir "yapay zeka ürünü" değildir.
+      <strong>Yapay zekayı araç olarak kullanan bir tıp eğitimi ve klinik destek platformudur.</strong>
+      Bu ayrım, hem ürün kararlarında hem de iletişimde her zaman korunmalıdır.
+    </p>
+  </div>
+</section>
+
+<!-- FOOTER -->
+<div class="footer">
+  <div class="footer-brand"><span>MEDASI</span> Platform Dokümantasyonu</div>
+  <div class="footer-doc">Döküman Serisi 01 / 05 — Zamansız Yol Haritası</div>
+  <div class="footer-page">medasi.com.tr</div>
+</div>
+
+</body>
+</html>

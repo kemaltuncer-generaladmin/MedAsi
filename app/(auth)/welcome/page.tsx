@@ -20,7 +20,7 @@ import { Button, Card, Input } from "@/components/ui";
 import { login, register, validateCoupon, type CouponValidationResult } from "@/lib/actions/auth";
 import { PACKAGE_SELECTION_OPTIONS, SENIORITY_OPTIONS } from "@/lib/schemas/auth";
 
-type Tab = "login" | "register";
+type Tab = "register";
 const PACKAGE_LABELS: Record<(typeof PACKAGE_SELECTION_OPTIONS)[number], string> = {
   ucretsiz: "Ücretsiz — Temel Araçlar",
   giris: "Giriş — ₺99/ay (Sınırlı AI)",
@@ -29,27 +29,19 @@ const PACKAGE_LABELS: Record<(typeof PACKAGE_SELECTION_OPTIONS)[number], string>
 };
 
 export default function WelcomePage() {
-  const [tab, setTab] = useState<Tab>("login");
+  const [tab, setTab] = useState<Tab>("register");
 
   return (
     <div className="w-full space-y-6">
       <div className="flex rounded-[4px] border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
-        {(["login", "register"] as Tab[]).map((t) => (
-          <button
-            key={t}
-            onClick={() => setTab(t)}
-            className={[
-              "flex-1 py-2.5 text-sm font-medium transition-all duration-150",
-              tab === t
-                ? "bg-[var(--color-primary)] text-black"
-                : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
-            ].join(" ")}
-          >
-            {t === "login" ? "Giriş Yap" : "Kayıt Ol"}
-          </button>
-        ))}
+        <button
+          className="flex-1 py-2.5 text-sm font-medium transition-all duration-150 bg-[var(--color-primary)] text-black"
+        >
+          Kayıt Ol
+        </button>
       </div>
-      {tab === "login" ? <LoginForm /> : <RegisterForm />}
+
+      <RegisterForm />
     </div>
   );
 }
@@ -197,7 +189,8 @@ function RegisterForm() {
   const [showPw, setShowPw] = useState(false);
   const [pw, setPw] = useState("");
   const [cpw, setCpw] = useState("");
-  const [termsAccepted, setTermsAccepted] = useState(false);
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [medicalDataConsentAccepted, setMedicalDataConsentAccepted] = useState(false);
   const [pending, startTransition] = useTransition();
   const match = cpw.length === 0 || pw === cpw;
   const [couponCode, setCouponCode] = useState("");
@@ -500,19 +493,42 @@ function RegisterForm() {
         <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
           <input
             type="checkbox"
+            name="termsAccepted"
             required
-            checked={termsAccepted}
-            onChange={(e) => setTermsAccepted(e.target.checked)}
+            checked={legalAccepted}
+            onChange={(e) => setLegalAccepted(e.target.checked)}
             className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-background)] accent-[var(--color-primary)]"
           />
           <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
-            Kullanım şartlarını ve gizlilik politikasını kabul ediyorum
+            <input type="hidden" name="privacyAccepted" value={legalAccepted ? "true" : "false"} />
+            <Link href="/terms" className="text-[var(--color-primary)] hover:opacity-80">
+              Kullanım Şartları
+            </Link>
+            {" ve "}
+            <Link href="/privacy" className="text-[var(--color-primary)] hover:opacity-80">
+              Gizlilik/KVKK
+            </Link>
+            {" metinlerini okudum ve kabul ediyorum."}
+          </span>
+        </label>
+
+        <label className="flex items-start gap-2.5 cursor-pointer select-none">
+          <input
+            type="checkbox"
+            name="medicalDataConsentAccepted"
+            required
+            checked={medicalDataConsentAccepted}
+            onChange={(e) => setMedicalDataConsentAccepted(e.target.checked)}
+            className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-background)] accent-[var(--color-primary)]"
+          />
+          <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
+            Hasta/sağlık verisi gibi özel nitelikli verileri yalnızca yetkili kullanım amacıyla işleyeceğimi, platformun eğitim amaçlı olduğunu ve klinik karar sorumluluğunun kullanıcıda olduğunu kabul ediyorum.
           </span>
         </label>
 
         <Button
           type="submit"
-          disabled={pending || !match || !termsAccepted}
+          disabled={pending || !match || !legalAccepted || !medicalDataConsentAccepted}
           className="w-full h-11 rounded-[4px] mt-1"
         >
           {pending ? (

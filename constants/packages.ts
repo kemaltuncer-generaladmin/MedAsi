@@ -1,19 +1,31 @@
-import type { PackageName } from '@/types'
+export type NormalizedPackageTier =
+  | "ucretsiz"
+  | "giris"
+  | "pro"
+  | "kurumsal";
 
-export const PACKAGES: Record<PackageName, { label: string; dailyAiLimit: number; price: number }> = {
-  student: {
-    label: 'Öğrenci',
-    dailyAiLimit: 10,
+export const PACKAGES: Record<
+  NormalizedPackageTier,
+  { label: string; dailyAiLimit: number; price: number }
+> = {
+  ucretsiz: {
+    label: "Ücretsiz",
+    dailyAiLimit: 25,
     price: 0,
   },
-  clinic_pro: {
-    label: 'Klinik Pro',
-    dailyAiLimit: -1,
-    price: 299,
+  giris: {
+    label: "Giriş",
+    dailyAiLimit: 100,
+    price: 149,
   },
-  enterprise: {
-    label: 'Kurumsal',
-    dailyAiLimit: -1,
-    price: 999,
+  pro: {
+    label: "Pro",
+    dailyAiLimit: 400,
+    price: 399,
   },
-}
+  kurumsal: {
+    label: "Kurumsal",
+    dailyAiLimit: 2000,
+    price: 1299,
+  },
+};

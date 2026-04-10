@@ -1,21 +1,25 @@
-'use server'
+"use server";
 
-import { prisma } from '@/lib/prisma'
-import { createClient } from '@/lib/supabase/server'
-import type { ProfileData } from '@/stores/onboarding'
+import { prisma } from "@/lib/prisma";
+import { createClient } from "@/lib/supabase/server";
 
 export async function completeOnboarding(data: {
-  goals: string[]
-  interests: string[]
-  notifications: { email: boolean; push: boolean; sms: boolean }
-  profile?: Partial<ProfileData>
+  studyLevel: string;
+  goals: string[];
+  weeklyStudyHours: string;
+  preferredStudyTime: string;
+  tusExamDate?: string;
+  communicationStyle?: string;
 }) {
   try {
-    const supabase = await createClient()
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
+    const supabase = await createClient();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
 
     if (authError || !user) {
-      return { success: false, error: 'Oturum doğrulanamadı' }
+      return { success: false, error: "Oturum doğrulanamadı" };
     }
 
     await prisma.user.update({
@@ -23,16 +27,19 @@ export async function completeOnboarding(data: {
       data: {
         onboardingCompleted: true,
         goals: data.goals,
-        interests: data.interests,
+        interests: [data.studyLevel],
         notificationPrefs: {
-          ...data.notifications,
-          ...(data.profile ? { _profile: data.profile } : {}),
+          weeklyStudyHours: data.weeklyStudyHours,
+          preferredStudyTime: data.preferredStudyTime,
+          tusExamDate: data.tusExamDate ?? null,
+          studyLevel: data.studyLevel,
+          communicationStyle: data.communicationStyle ?? "friendly",
         },
       },
-    })
+    });
 
-    return { success: true }
+    return { success: true };
   } catch {
-    return { success: false, error: 'Bağlantı hatası, lütfen tekrar dene' }
+    return { success: false, error: "Bağlantı hatası, lütfen tekrar dene" };
   }
 }

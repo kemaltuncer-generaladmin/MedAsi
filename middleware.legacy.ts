@@ -41,6 +41,7 @@ const MODULE_PATH_MAP: Record<string, string[]> = {
 type AccessProfile = {
   onboardingCompleted: boolean | null;
   packageName: string | null;
+  role: string | null;
 };
 
 const USER_APP_PREFIXES = [
@@ -147,7 +148,7 @@ function isAppPathAllowedForPackage(pathname: string, packageName: string | null
 
 async function getAccessProfile(userId: string): Promise<AccessProfile> {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { onboardingCompleted: null, packageName: null };
+    return { onboardingCompleted: null, packageName: null, role: null };
   }
 
   const adminClient = createSupabaseClient(
@@ -163,12 +164,12 @@ async function getAccessProfile(userId: string): Promise<AccessProfile> {
 
   const { data, error } = await adminClient
     .from("users")
-    .select("onboarding_completed, package:packages(name)")
+    .select("onboarding_completed, role, package:packages(name)")
     .eq("id", userId)
     .maybeSingle();
 
   if (error) {
-    return { onboardingCompleted: null, packageName: null };
+    return { onboardingCompleted: null, packageName: null, role: null };
   }
 
   const packageField = data?.package as
@@ -183,6 +184,7 @@ async function getAccessProfile(userId: string): Promise<AccessProfile> {
   return {
     onboardingCompleted: data?.onboarding_completed ?? null,
     packageName,
+    role: data?.role ?? null,
   };
 }
 
@@ -218,7 +220,9 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const role = user?.user_metadata?.role as string | undefined;
+  const metadataRole = user?.user_metadata?.role as string | undefined;
+  const profile = user ? await getAccessProfile(user.id) : null;
+  const role = profile?.role ?? metadataRole;
   const isPrivileged = role === "admin" || role === "org_admin";
 
   // ── Kimlik doğrulama gerektiren rotalar ────────────────────────────────
@@ -226,12 +230,11 @@ export async function middleware(request: NextRequest) {
   const needsAuth = pathStartsWithAny(pathname, protectedPrefixes);
 
   if (!user && needsAuth) {
-    return NextResponse.redirect(new URL("/welcome", request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   if (user && !isPrivileged) {
-    const profile = await getAccessProfile(user.id);
-    const onboardingCompleted = profile.onboardingCompleted;
+    const onboardingCompleted = profile?.onboardingCompleted ?? null;
 
     if (onboardingCompleted === false && pathname !== "/setup") {
       return NextResponse.redirect(new URL("/setup", request.url));
@@ -244,7 +247,7 @@ export async function middleware(request: NextRequest) {
     if (
       onboardingCompleted === true &&
       isUserAppPath(pathname) &&
-      !isAppPathAllowedForPackage(pathname, profile.packageName)
+      !isAppPathAllowedForPackage(pathname, profile?.packageName ?? null)
     ) {
       return NextResponse.redirect(new URL("/upgrade?reason=package_access", request.url));
     }
@@ -262,7 +265,8 @@ export async function middleware(request: NextRequest) {
           }
         }
       } catch {
-        // Modül toggle yüklenemezse erişime izin ver (fail-open)
+        // Modül toggle yüklenemezse erişimi reddet (fail-closed)
+        return NextResponse.redirect(new URL("/dashboard?reason=module_check_failed", request.url));
       }
     }
   }
@@ -291,8 +295,7 @@ export async function middleware(request: NextRequest) {
   // ── Giriş yapmış kullanıcı /welcome veya /login'e girmeye çalışırsa ──
   if (user && (pathname === "/welcome" || pathname === "/login")) {
     if (!isPrivileged) {
-      const profile = await getAccessProfile(user.id);
-      const onboardingCompleted = profile.onboardingCompleted;
+      const onboardingCompleted = profile?.onboardingCompleted ?? null;
       if (onboardingCompleted === false) {
         return NextResponse.redirect(new URL("/setup", request.url));
       }

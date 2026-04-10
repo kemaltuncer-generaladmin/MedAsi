@@ -1,93 +1,90 @@
-'use client'
+"use client";
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState } from "react";
 
-const DAYS = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz']
+const DAYS = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
 
-// Generate plausible mock registration data for the last 7 days
-function generateMockData(): number[] {
-  return [14, 22, 18, 31, 26, 19, 37]
-}
+const FALLBACK_DATA = [0, 0, 0, 0, 0, 0, 0];
 
-const WIDTH = 480
-const HEIGHT = 220
-const PADDING = { top: 20, right: 24, bottom: 36, left: 40 }
+const WIDTH = 480;
+const HEIGHT = 220;
+const PADDING = { top: 20, right: 24, bottom: 36, left: 40 };
 
 function buildPath(points: [number, number][]): string {
-  if (points.length === 0) return ''
-  const [first, ...rest] = points
-  let d = `M ${first[0]} ${first[1]}`
+  if (points.length === 0) return "";
+  const [first, ...rest] = points;
+  let d = `M ${first[0]} ${first[1]}`;
   for (let i = 0; i < rest.length; i++) {
-    const prev = points[i]
-    const curr = rest[i]
-    const cpx = (prev[0] + curr[0]) / 2
-    d += ` C ${cpx} ${prev[1]}, ${cpx} ${curr[1]}, ${curr[0]} ${curr[1]}`
+    const prev = points[i];
+    const curr = rest[i];
+    const cpx = (prev[0] + curr[0]) / 2;
+    d += ` C ${cpx} ${prev[1]}, ${cpx} ${curr[1]}, ${curr[0]} ${curr[1]}`;
   }
-  return d
+  return d;
 }
 
-export function RegistrationChart() {
-  const data = generateMockData()
-  const animRef = useRef<number | null>(null)
-  const [progress, setProgress] = useState(0)
+export function RegistrationChart({ data = FALLBACK_DATA }: { data?: number[] }) {
+  const animRef = useRef<number | null>(null);
+  const [progress, setProgress] = useState(0);
 
-  const maxVal = Math.max(...data)
-  const chartW = WIDTH - PADDING.left - PADDING.right
-  const chartH = HEIGHT - PADDING.top - PADDING.bottom
+  const safeData = data.length > 0 ? data : FALLBACK_DATA;
+  const maxVal = Math.max(...safeData, 1);
+  const chartW = WIDTH - PADDING.left - PADDING.right;
+  const chartH = HEIGHT - PADDING.top - PADDING.bottom;
 
-  const points: [number, number][] = data.map((v, i) => [
-    PADDING.left + (i / (data.length - 1)) * chartW,
+  const points: [number, number][] = safeData.map((v, i) => [
+    PADDING.left + (i / (safeData.length - 1)) * chartW,
     PADDING.top + (1 - v / (maxVal * 1.1)) * chartH,
-  ])
+  ]);
 
   // Animated progress 0 → 1 over ~900ms
   useEffect(() => {
-    const start = performance.now()
-    const duration = 900
+    const start = performance.now();
+    const duration = 900;
 
     function step(now: number) {
-      const elapsed = now - start
-      const t = Math.min(elapsed / duration, 1)
+      const elapsed = now - start;
+      const t = Math.min(elapsed / duration, 1);
       // ease-out cubic
-      const eased = 1 - Math.pow(1 - t, 3)
-      setProgress(eased)
+      const eased = 1 - Math.pow(1 - t, 3);
+      setProgress(eased);
       if (t < 1) {
-        animRef.current = requestAnimationFrame(step)
+        animRef.current = requestAnimationFrame(step);
       }
     }
 
-    animRef.current = requestAnimationFrame(step)
+    animRef.current = requestAnimationFrame(step);
     return () => {
-      if (animRef.current !== null) cancelAnimationFrame(animRef.current)
-    }
-  }, [])
+      if (animRef.current !== null) cancelAnimationFrame(animRef.current);
+    };
+  }, []);
 
   // Visible points up to progress
-  const visibleCount = Math.max(2, Math.ceil(progress * data.length))
-  const visiblePoints = points.slice(0, visibleCount)
+  const visibleCount = Math.max(2, Math.ceil(progress * safeData.length));
+  const visiblePoints = points.slice(0, visibleCount);
 
-  const linePath = buildPath(visiblePoints)
+  const linePath = buildPath(visiblePoints);
 
   // Area fill path
-  let areaPath = ''
+  let areaPath = "";
   if (visiblePoints.length >= 2) {
-    const last = visiblePoints[visiblePoints.length - 1]
-    const first = visiblePoints[0]
+    const last = visiblePoints[visiblePoints.length - 1];
+    const first = visiblePoints[0];
     areaPath =
       linePath +
       ` L ${last[0]} ${PADDING.top + chartH}` +
-      ` L ${first[0]} ${PADDING.top + chartH} Z`
+      ` L ${first[0]} ${PADDING.top + chartH} Z`;
   }
 
   // Y-axis ticks
-  const yTicks = [0, Math.round(maxVal * 0.5), maxVal]
-  const latestPoint = points[points.length - 1]
+  const yTicks = [0, Math.round(maxVal * 0.5), maxVal];
+  const latestPoint = points[points.length - 1];
 
   // Horizontal grid lines
   const gridLines = yTicks.slice(1).map((tick) => {
-    const y = PADDING.top + (1 - tick / (maxVal * 1.1)) * chartH
-    return y
-  })
+    const y = PADDING.top + (1 - tick / (maxVal * 1.1)) * chartH;
+    return y;
+  });
 
   return (
     <div className="w-full" style={{ minHeight: `${HEIGHT}px` }}>
@@ -99,8 +96,16 @@ export function RegistrationChart() {
       >
         <defs>
           <linearGradient id="chartGrad" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-primary)" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="var(--color-primary)" stopOpacity="0.02" />
+            <stop
+              offset="0%"
+              stopColor="var(--color-primary)"
+              stopOpacity="0.3"
+            />
+            <stop
+              offset="100%"
+              stopColor="var(--color-primary)"
+              stopOpacity="0.02"
+            />
           </linearGradient>
           <filter id="glowDot">
             <feGaussianBlur stdDeviation="2.5" result="blur" />
@@ -127,7 +132,7 @@ export function RegistrationChart() {
 
         {/* Y-axis labels */}
         {yTicks.map((tick) => {
-          const y = PADDING.top + (1 - tick / (maxVal * 1.1)) * chartH
+          const y = PADDING.top + (1 - tick / (maxVal * 1.1)) * chartH;
           return (
             <text
               key={tick}
@@ -139,13 +144,13 @@ export function RegistrationChart() {
             >
               {tick}
             </text>
-          )
+          );
         })}
 
         {/* X-axis day labels */}
         {DAYS.map((day, i) => {
-          const x = PADDING.left + (i / (data.length - 1)) * chartW
-          const y = PADDING.top + chartH + 20
+          const x = PADDING.left + (i / (data.length - 1)) * chartW;
+          const y = PADDING.top + chartH + 20;
           return (
             <text
               key={day}
@@ -157,13 +162,11 @@ export function RegistrationChart() {
             >
               {day}
             </text>
-          )
+          );
         })}
 
         {/* Area fill */}
-        {areaPath && (
-          <path d={areaPath} fill="url(#chartGrad)" />
-        )}
+        {areaPath && <path d={areaPath} fill="url(#chartGrad)" />}
 
         {/* Line */}
         {linePath && (
@@ -240,11 +243,11 @@ export function RegistrationChart() {
               fontWeight="600"
               fill="black"
             >
-              {data[data.length - 1]}
+              {safeData[safeData.length - 1]}
             </text>
           </>
         )}
       </svg>
     </div>
-  )
+  );
 }

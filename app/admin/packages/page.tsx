@@ -1,20 +1,14 @@
 'use client'
 
 import { useEffect, useState, useCallback } from 'react'
-import Link from 'next/link'
 import toast from 'react-hot-toast'
 import {
-  ShieldCheck, ArrowLeft, Package, Users, TrendingUp,
-  Save, RefreshCw, Layers, DollarSign, Trash2,
-  ChevronDown, ChevronUp,
+  Package, Users, TrendingUp,
+  Save, RefreshCw, Layers, DollarSign
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import {
-  getPackagesWithCount, updatePackage, deletePackage,
-  getAllModules, getModulesForPackage, updatePackageModules,
-} from '@/lib/actions/admin'
-import { CANONICAL_PACKAGE_NAMES } from '@/constants'
+import { getPackagesWithCount, updatePackage } from '@/lib/actions/admin'
 
 type PackageWithCount = {
   id: string
@@ -22,12 +16,6 @@ type PackageWithCount = {
   dailyAiLimit: number
   price: number
   _count: { users: number }
-}
-
-type Module = {
-  id: string
-  name: string
-  description: string | null
 }
 
 type EditState = {
@@ -42,26 +30,19 @@ const PACKAGE_CONFIG: Record<string, {
   label: string
   description: string
 }> = {
-  'Ücretsiz': {
+  'Öğrenci': {
     badgeVariant: 'default',
     borderColor: 'var(--color-primary)',
     accentColor: 'var(--color-primary)',
-    label: 'Ücretsiz',
-    description: 'Temel kullanım paketi',
+    label: 'Öğrenci',
+    description: 'Tıp öğrencileri için temel paket',
   },
-  'Giriş': {
+  'Klinik Pro': {
     badgeVariant: 'success',
     borderColor: 'var(--color-success)',
     accentColor: 'var(--color-success)',
-    label: 'Giriş',
-    description: 'Gelişmiş çekirdek özellikler',
-  },
-  'Pro': {
-    badgeVariant: 'success',
-    borderColor: 'var(--color-secondary)',
-    accentColor: 'var(--color-secondary)',
-    label: 'Pro',
-    description: 'Yüksek hacimli profesyonel kullanım',
+    label: 'Klinik Pro',
+    description: 'Klinisyenler için gelişmiş paket',
   },
   'Kurumsal': {
     badgeVariant: 'warning',
@@ -89,110 +70,12 @@ function formatTR(value: number, decimals = 0) {
   })
 }
 
-// ── Modules Panel ───────────────────────────────────────────────────────────
-
-function PackageModulesPanel({ packageId }: { packageId: string }) {
-  const [allModules, setAllModules] = useState<Module[]>([])
-  const [checked, setChecked] = useState<Set<string>>(new Set())
-  const [saving, setSaving] = useState(false)
-  const [loaded, setLoaded] = useState(false)
-
-  useEffect(() => {
-    async function load() {
-      try {
-        const [modules, ids] = await Promise.all([
-          getAllModules(),
-          getModulesForPackage(packageId),
-        ])
-        setAllModules(modules)
-        setChecked(new Set(ids))
-        setLoaded(true)
-      } catch {
-        toast.error('Modüller yüklenemedi')
-      }
-    }
-    load()
-  }, [packageId])
-
-  async function handleSave() {
-    setSaving(true)
-    try {
-      await updatePackageModules(packageId, Array.from(checked))
-      toast.success('Modüller güncellendi')
-    } catch {
-      toast.error('Güncelleme başarısız')
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  function toggle(id: string) {
-    setChecked((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
-  if (!loaded) {
-    return (
-      <div className="px-5 pb-4">
-        <div className="h-16 rounded-lg animate-pulse bg-[var(--color-border)]" />
-      </div>
-    )
-  }
-
-  if (allModules.length === 0) {
-    return (
-      <div className="px-5 pb-4 text-xs text-[var(--color-text-secondary)]">
-        Sistemde henüz modül yok.
-      </div>
-    )
-  }
-
-  return (
-    <div className="px-5 pb-5 space-y-3">
-      <div
-        className="rounded-lg p-3 space-y-2"
-        style={{ backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)' }}
-      >
-        {allModules.map((mod) => (
-          <label key={mod.id} className="flex items-center gap-2.5 cursor-pointer group">
-            <input
-              type="checkbox"
-              checked={checked.has(mod.id)}
-              onChange={() => toggle(mod.id)}
-              className="rounded"
-              style={{ accentColor: 'var(--color-primary)' }}
-            />
-            <div>
-              <span className="text-sm text-[var(--color-text-primary)]">{mod.name}</span>
-              {mod.description && (
-                <span className="text-xs text-[var(--color-text-secondary)] ml-1.5">— {mod.description}</span>
-              )}
-            </div>
-          </label>
-        ))}
-      </div>
-      <Button variant="secondary" size="sm" onClick={handleSave} loading={saving} disabled={saving}>
-        <Save size={13} />
-        Modülleri Kaydet
-      </Button>
-    </div>
-  )
-}
-
-// ── Main Page ───────────────────────────────────────────────────────────────
-
 export default function PackagesPage() {
   const [packages, setPackages] = useState<PackageWithCount[]>([])
   const [loading, setLoading] = useState(true)
   const [editStates, setEditStates] = useState<Record<string, EditState>>({})
   const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
   const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
-  const [deletingIds, setDeletingIds] = useState<Set<string>>(new Set())
-  const [expandedModules, setExpandedModules] = useState<Set<string>>(new Set())
 
   const loadPackages = useCallback(async () => {
     setLoading(true)
@@ -274,82 +157,40 @@ export default function PackagesPage() {
     }
   }
 
-  async function handleDelete(pkg: PackageWithCount) {
-    if (pkg._count.users > 0) {
-      toast.error(`Bu pakette ${pkg._count.users} kullanıcı var. Önce kullanıcıları taşıyın.`)
-      return
-    }
-    if (!confirm(`"${pkg.name}" paketini silmek istediğinizden emin misiniz?`)) return
-
-    setDeletingIds((prev) => new Set([...prev, pkg.id]))
-    try {
-      await deletePackage(pkg.id)
-      setPackages((prev) => prev.filter((p) => p.id !== pkg.id))
-      toast.success(`${pkg.name} paketi silindi`)
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : 'Silme başarısız')
-    } finally {
-      setDeletingIds((prev) => {
-        const next = new Set(prev)
-        next.delete(pkg.id)
-        return next
-      })
-    }
-  }
-
-  function toggleModules(id: string) {
-    setExpandedModules((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-
   const totalRevenue = packages.reduce(
     (sum, pkg) => sum + pkg.price * pkg._count.users,
     0
   )
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)]">
-      {/* Header */}
-      <header className="h-16 bg-[var(--color-surface)] border-b border-[var(--color-border)] flex items-center justify-between px-6 sticky top-0 z-50">
-        <div className="flex items-center gap-3">
-          <ShieldCheck size={22} className="text-[var(--color-primary)]" />
-          <span className="text-lg font-bold text-[var(--color-text-primary)] tracking-wide">
-            MED<span className="text-[var(--color-primary)]">ASI</span>{' '}
-            <span className="text-[var(--color-text-secondary)] font-normal text-sm ml-1">Admin Panel</span>
-          </span>
+    <div
+      className="space-y-6"
+      style={{ animation: 'adminFadeIn 300ms ease forwards' }}
+    >
+      <style>{`
+        @keyframes adminFadeIn {
+          from { opacity: 0; transform: translateY(8px); }
+          to   { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+
+      {/* Page title */}
+      <div className="flex items-start justify-between gap-4 flex-wrap py-2 px-1">
+        <div>
+          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
+            Paket Yönetimi
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
+            Abonelik paketlerini görüntüleyin ve düzenleyin. Değişiklikler otomatik kaydedilir.
+          </p>
         </div>
         <div className="flex items-center gap-2">
           <Button variant="ghost" size="sm" onClick={loadPackages} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
             Yenile
           </Button>
-          <Link href="/admin">
-            <Button variant="ghost" size="sm">
-              <ArrowLeft size={15} />
-              Geri Dön
-            </Button>
-          </Link>
         </div>
-      </header>
-
-      <main className="max-w-7xl mx-auto px-6 py-8 space-y-8">
-        {/* Page title */}
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 mb-1">
-              <Package size={22} className="text-[var(--color-primary)]" />
-              <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">Paket Yönetimi</h1>
-            </div>
-            <p className="text-sm text-[var(--color-text-secondary)]">
-              Abonelik paketlerini görüntüleyin, düzenleyin ve yönetin.
-            </p>
-          </div>
-          <Badge variant="secondary">Sabit 4 paket modeli aktif</Badge>
-        </div>
+      </div>
 
         {/* Loading skeleton */}
         {loading ? (
@@ -373,12 +214,10 @@ export default function PackagesPage() {
                   price: String(pkg.price),
                 }
                 const isSaving = savingIds.has(pkg.id)
-                const isDeleting = deletingIds.has(pkg.id)
                 const isDirty = dirtyIds.has(pkg.id)
                 const currentLimit = parseInt(state.dailyAiLimit, 10) || 0
                 const currentPrice = parseFloat(state.price) || 0
                 const revenue = currentPrice * pkg._count.users
-                const modulesExpanded = expandedModules.has(pkg.id)
 
                 return (
                   <div
@@ -395,24 +234,7 @@ export default function PackagesPage() {
                         >
                           {pkg.name}
                         </h2>
-                        <div className="flex items-center gap-1.5">
-                          <Badge variant={config.badgeVariant}>{config.label}</Badge>
-                          {!CANONICAL_PACKAGE_NAMES.includes(pkg.name) && (
-                            <button
-                              onClick={() => handleDelete(pkg)}
-                              disabled={isDeleting || pkg._count.users > 0}
-                              title={pkg._count.users > 0 ? `${pkg._count.users} kullanıcı var` : 'Sil'}
-                              className="p-1 rounded transition-colors"
-                              style={{
-                                color: pkg._count.users > 0 ? 'var(--color-text-secondary)' : 'var(--color-destructive)',
-                                opacity: pkg._count.users > 0 ? 0.4 : 1,
-                                cursor: pkg._count.users > 0 ? 'not-allowed' : 'pointer',
-                              }}
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          )}
-                        </div>
+                        <Badge variant={config.badgeVariant}>{config.label}</Badge>
                       </div>
                       <p className="text-xs text-[var(--color-text-secondary)] mb-3">{config.description}</p>
                       <div className="flex items-center gap-1.5">
@@ -478,7 +300,7 @@ export default function PackagesPage() {
                     </div>
 
                     {/* Save button */}
-                    <div className="px-5 pb-3">
+                    <div className="px-5 pb-5">
                       <Button
                         variant={isDirty ? 'primary' : 'secondary'}
                         size="sm"
@@ -491,28 +313,6 @@ export default function PackagesPage() {
                         {isSaving ? 'Kaydediliyor…' : isDirty ? 'Değişiklikleri Kaydet' : 'Kaydet'}
                       </Button>
                     </div>
-
-                    {/* Modules toggle */}
-                    <div className="px-5 pb-3">
-                      <button
-                        onClick={() => toggleModules(pkg.id)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-md text-xs font-semibold uppercase tracking-wider transition-colors"
-                        style={{
-                          color: 'var(--color-text-secondary)',
-                          backgroundColor: 'var(--color-background)',
-                          border: '1px solid var(--color-border)',
-                        }}
-                      >
-                        <span>Modüller</span>
-                        {modulesExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                      </button>
-                    </div>
-
-                    {modulesExpanded && (
-                      <div className="border-t border-[var(--color-border)]">
-                        <PackageModulesPanel packageId={pkg.id} />
-                      </div>
-                    )}
                   </div>
                 )
               })}
@@ -659,7 +459,6 @@ export default function PackagesPage() {
             </div>
           </>
         )}
-      </main>
     </div>
   )
 }
