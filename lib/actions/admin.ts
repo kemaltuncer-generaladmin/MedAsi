@@ -1,10 +1,15 @@
 "use server";
 
-import { createClient, createAdminClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { getCurrentUserWithRole } from "@/lib/auth/current-user-role";
 import { CANONICAL_PACKAGE_NAMES } from "@/constants";
+import { creditTokens, getWalletBalance } from "@/lib/ai/token-wallet";
+import { sendPasswordResetEmail } from "@/lib/email";
+import { ensureUsageTrackingSchema } from "@/lib/db/schema-guard";
+import { parseAiUsageEventFromLog } from "@/lib/ai/telemetry";
 
 async function checkAdmin() {
   const { user, role } = await getCurrentUserWithRole();
@@ -18,6 +23,7 @@ async function checkAdmin() {
 
 export async function getUsers() {
   await checkAdmin();
+  await ensureUsageTrackingSchema();
   const users = await prisma.user.findMany({
     include: {
       package: true,
@@ -26,7 +32,95 @@ export async function getUsers() {
       createdAt: "desc",
     },
   });
-  return users;
+
+  if (users.length === 0) return users;
+
+  const userIds = users.map((user) => user.id);
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+  const [aiLogs, moduleActivities] = await Promise.all([
+    prisma.systemLog.findMany({
+      where: {
+        userId: { in: userIds },
+        createdAt: { gte: since },
+        message: "AI_USAGE_EVENT",
+      },
+      select: {
+        userId: true,
+        createdAt: true,
+        details: true,
+        message: true,
+      },
+    }),
+    prisma.moduleActivity.findMany({
+      where: {
+        userId: { in: userIds },
+        createdAt: { gte: since },
+      },
+      select: {
+        userId: true,
+        createdAt: true,
+      },
+    }),
+  ]);
+
+  const usageByUser = new Map<
+    string,
+    {
+      aiCalls: number;
+      aiTokens: number;
+      moduleEvents: number;
+      lastActivityAt: Date | null;
+    }
+  >();
+
+  for (const log of aiLogs) {
+    if (!log.userId) continue;
+    const parsed = parseAiUsageEventFromLog({
+      createdAt: log.createdAt,
+      details: log.details,
+      userId: log.userId,
+      message: log.message,
+    });
+    if (!parsed) continue;
+
+    const current = usageByUser.get(log.userId) ?? {
+      aiCalls: 0,
+      aiTokens: 0,
+      moduleEvents: 0,
+      lastActivityAt: null,
+    };
+    current.aiCalls += 1;
+    current.aiTokens += parsed.totalTokens;
+    if (!current.lastActivityAt || log.createdAt > current.lastActivityAt) {
+      current.lastActivityAt = log.createdAt;
+    }
+    usageByUser.set(log.userId, current);
+  }
+
+  for (const entry of moduleActivities) {
+    const current = usageByUser.get(entry.userId) ?? {
+      aiCalls: 0,
+      aiTokens: 0,
+      moduleEvents: 0,
+      lastActivityAt: null,
+    };
+    current.moduleEvents += 1;
+    if (!current.lastActivityAt || entry.createdAt > current.lastActivityAt) {
+      current.lastActivityAt = entry.createdAt;
+    }
+    usageByUser.set(entry.userId, current);
+  }
+
+  return users.map((user) => ({
+    ...user,
+    usage30d: usageByUser.get(user.id) ?? {
+      aiCalls: 0,
+      aiTokens: 0,
+      moduleEvents: 0,
+      lastActivityAt: user.lastLoginAt ?? null,
+    },
+  }));
 }
 
 export async function updateUserRole(userId: string, role: string) {
@@ -57,7 +151,7 @@ export async function createUser(data: {
   password: string;
 }) {
   await checkAdmin();
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: authData, error: authError } =
     await supabase.auth.admin.createUser({
@@ -75,9 +169,43 @@ export async function createUser(data: {
       name: data.name,
       packageId: data.packageId,
       role: data.role,
+      accountApprovedAt: new Date(),
     },
   });
   revalidatePath("/admin/users");
+}
+
+export async function approveUserAccount(userId: string) {
+  const admin = await checkAdmin();
+  await ensureUsageTrackingSchema();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, accountApprovedAt: true },
+  });
+  if (!user) throw new Error("Kullanıcı bulunamadı.");
+  if (user.accountApprovedAt) return { alreadyApproved: true };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      accountApprovedAt: new Date(),
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+    },
+  });
+
+  await prisma.systemLog.create({
+    data: {
+      level: "info",
+      category: "admin.account_approval",
+      message: `Admin kullanıcı hesabını onayladı: ${userId}`,
+      details: JSON.stringify({ userId, email: user.email, adminId: admin.id }),
+      userId: admin.id,
+    },
+  });
+
+  revalidatePath("/admin/users");
+  return { alreadyApproved: false };
 }
 
 // ─── User Modules ─────────────────────────────────────────────────────────────
@@ -494,6 +622,111 @@ export async function deletePoolBatch(source: string): Promise<void> {
   revalidatePath("/admin/content");
 }
 
+export async function verifyUserEmail(userId: string) {
+  await checkAdmin();
+  const supabase = createAdminClient();
+  const { error } = await supabase.auth.admin.updateUserById(userId, {
+    email_confirm: true,
+  });
+  if (error) throw new Error(`E-posta onaylanamadı: ${error.message}`);
+  await prisma.systemLog.create({
+    data: {
+      level: 'info',
+      category: 'admin.email_verify',
+      message: `Admin tarafından e-posta doğrulandı: ${userId}`,
+      details: JSON.stringify({ userId }),
+    },
+  });
+  revalidatePath('/admin/users');
+}
+
+export async function sendUserPasswordResetLink(userId: string) {
+  const admin = await checkAdmin();
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { id: true, email: true, name: true },
+  });
+  if (!user) {
+    throw new Error("Kullanıcı bulunamadı.");
+  }
+
+  const headerStore = await headers();
+  const origin =
+    headerStore.get("origin") ||
+    process.env.NEXT_PUBLIC_SITE_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    "http://localhost:3000";
+  const redirectTo = `${origin.replace(/\/$/, "")}/api/auth/callback?next=/reset-password`;
+
+  const supabase = createAdminClient();
+  const { data, error } = await supabase.auth.admin.generateLink({
+    type: "recovery",
+    email: user.email,
+    options: { redirectTo },
+  });
+
+  if (error || !data?.properties?.action_link) {
+    throw new Error(`Şifre sıfırlama bağlantısı oluşturulamadı: ${error?.message ?? "Unknown error"}`);
+  }
+
+  await sendPasswordResetEmail(user.email, data.properties.action_link);
+
+  await prisma.systemLog.create({
+    data: {
+      level: "info",
+      category: "admin.password_reset",
+      message: `Admin şifre sıfırlama bağlantısı gönderdi: ${user.id}`,
+      details: JSON.stringify({ userId: user.id, email: user.email, adminId: admin.id }),
+      userId: admin.id,
+    },
+  });
+
+  revalidatePath("/admin/users");
+  return { email: user.email, name: user.name };
+}
+
+export async function giftTokens(
+  userId: string,
+  amount: number,
+  description: string,
+): Promise<{ newBalance: bigint }> {
+  const adminUser = await checkAdmin();
+  if (amount <= 0 || !Number.isInteger(amount)) {
+    throw new Error("Token miktarı pozitif bir tam sayı olmalıdır.");
+  }
+  if (!description.trim()) {
+    throw new Error("Açıklama zorunludur.");
+  }
+
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, email: true } });
+  if (!user) throw new Error("Kullanıcı bulunamadı.");
+
+  const newBalance = await creditTokens(
+    userId,
+    BigInt(amount),
+    "admin_adjust",
+    description.trim(),
+    `admin:${adminUser.id}`,
+  );
+
+  await prisma.systemLog.create({
+    data: {
+      level: 'info',
+      category: 'admin.token_gift',
+      message: `Admin token hediye etti: ${userId} → ${amount} token`,
+      details: JSON.stringify({ userId, email: user.email, amount, description, adminId: adminUser.id }),
+    },
+  });
+
+  revalidatePath('/admin/users');
+  return { newBalance };
+}
+
+export async function getUserTokenBalance(userId: string): Promise<bigint> {
+  await checkAdmin();
+  return getWalletBalance(userId);
+}
+
 export async function deleteUser(userId: string) {
   await checkAdmin();
   return await deleteUserInternal(userId);
@@ -525,6 +758,9 @@ export async function deleteUserInternal(userId: string) {
       prisma.studySession.deleteMany({ where: { userId } }),
       prisma.tokenTransaction.deleteMany({ where: { userId } }),
       prisma.tokenWallet.deleteMany({ where: { userId } }),
+      prisma.supportTicketMessage.deleteMany({ where: { authorUserId: userId } }),
+      prisma.supportTicket.deleteMany({ where: { userId } }),
+      prisma.userAddonAccess.deleteMany({ where: { OR: [{ userId }, { grantedByUserId: userId }] } }),
       prisma.studentLearningProfile.deleteMany({ where: { userId } }),
       prisma.dashboardPreferences.deleteMany({ where: { userId } }),
       prisma.questionAttempt.deleteMany({ where: { userId } }),

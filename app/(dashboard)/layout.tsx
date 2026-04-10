@@ -1,5 +1,13 @@
 import { redirect } from "next/navigation";
-import { DashboardShell, Sidebar, Topbar, AnnouncementBanner } from "@/components/layout";
+import {
+  DashboardShell,
+  Sidebar,
+  Topbar,
+  AnnouncementBanner,
+  PackageAccessWall,
+  SessionTimeoutManager,
+  ModuleActivityTracker,
+} from "@/components/layout";
 import { PACKAGES, ROUTES } from "@/constants";
 import type { Package as UserPackage } from "@/types";
 import type { ReactNode } from "react";
@@ -47,6 +55,19 @@ export default async function DashboardLayout({
   let dbUserData = dbUser;
 
   if (role !== "admin" && role !== "org_admin") {
+    if (
+      publicConfig.emailVerificationRequired &&
+      !user.email_confirmed_at
+    ) {
+      const email = encodeURIComponent(user.email ?? "");
+      const name = encodeURIComponent(
+        typeof user.user_metadata?.name === "string"
+          ? user.user_metadata.name
+          : "MedAsi kullanıcısı",
+      );
+      redirect(`/verify-email?email=${email}&name=${name}`);
+    }
+
     if (!dbUserData?.onboardingCompleted) {
       redirect("/setup");
     }
@@ -55,8 +76,7 @@ export default async function DashboardLayout({
   }
 
   const normalizedPackageName = normalizePackageName(dbUserData?.package?.name);
-  const resolvedPackageName =
-    normalizedPackageName === "unknown" ? "ucretsiz" : normalizedPackageName;
+  const resolvedPackageName = normalizedPackageName;
   const fallbackPackageMeta = PACKAGES[resolvedPackageName];
   const userName =
     typeof user.user_metadata?.name === "string" ? user.user_metadata.name : null;
@@ -78,9 +98,16 @@ export default async function DashboardLayout({
         <Sidebar
           packageName={packageName}
           moduleToggles={publicConfig.moduleToggles}
+          role={role}
         />
       }
-      banner={<AnnouncementBanner announcements={publicConfig.announcements} />}
+      banner={
+        <AnnouncementBanner
+          announcements={publicConfig.announcements}
+          userRole={role}
+          packageName={dbUserData?.package?.name ?? null}
+        />
+      }
       topbar={
         <Topbar
           user={{
@@ -95,7 +122,14 @@ export default async function DashboardLayout({
         />
       }
     >
-      {children}
+      <SessionTimeoutManager timeoutMinutes={publicConfig.sessionTimeoutMinutes} />
+      <ModuleActivityTracker />
+      <PackageAccessWall
+        packageName={dbUserData?.package?.name ?? null}
+        role={role}
+      >
+        {children}
+      </PackageAccessWall>
     </DashboardShell>
   );
 }

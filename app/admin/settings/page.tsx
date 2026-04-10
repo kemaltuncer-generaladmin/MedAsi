@@ -35,11 +35,12 @@ const DEFAULTS: SystemSettings = {
   adminLoginEnabled: true,
   orgAdminLoginEnabled: true,
   emailVerificationRequired: true,
+  twoFactorRequired: false,
   passwordResetEnabled: true,
   aiEnabled: true,
   aiModerationEnabled: true,
   aiTemperature: 0.7,
-  aiMaxTokens: 4096,
+  aiMaxTokens: 512,
   aiResponseStyle: "balanced",
   aiSystemPrompt: "",
   maxUsersPerDay: 0,
@@ -53,6 +54,7 @@ const DEFAULTS: SystemSettings = {
   allowedEmailDomains: "",
   maintenanceMessage:
     "Sistemimiz şu anda bakım modundadır. Lütfen daha sonra tekrar deneyiniz.",
+  usdTryRate: 39,
   appVersion: "1.0.0",
 };
 
@@ -106,6 +108,7 @@ export default function SettingsPage() {
       | "adminLoginEnabled"
       | "orgAdminLoginEnabled"
       | "emailVerificationRequired"
+      | "twoFactorRequired"
       | "passwordResetEnabled"
       | "aiEnabled"
       | "aiModerationEnabled"
@@ -123,6 +126,7 @@ export default function SettingsPage() {
       adminLoginEnabled: "Yönetici girişi",
       orgAdminLoginEnabled: "Org admin girişi",
       emailVerificationRequired: "E-posta doğrulama",
+      twoFactorRequired: "İki adımlı doğrulama",
       passwordResetEnabled: "Şifre sıfırlama",
       aiEnabled: "AI özellikleri",
       aiModerationEnabled: "AI moderasyon",
@@ -148,7 +152,7 @@ export default function SettingsPage() {
     persist(key, value);
   }
 
-  function handleFloatField(key: "aiTemperature", value: number) {
+  function handleFloatField(key: "aiTemperature" | "usdTryRate", value: number) {
     setSettings((prev) => ({ ...prev, [key]: value }));
     persist(key, value);
   }
@@ -199,6 +203,12 @@ export default function SettingsPage() {
   const securitySummary = settings.debugMode
     ? `Debug açık · ${settings.sessionTimeoutMinutes} dk`
     : `${settings.sessionTimeoutMinutes} dk oturum`;
+  const securityBadgeVariant =
+    settings.twoFactorRequired || settings.emailVerificationRequired
+      ? "success"
+      : settings.debugMode
+        ? "warning"
+        : "secondary";
   const authBadgeVariant =
     settings.maintenanceMode
       ? "destructive"
@@ -679,6 +689,46 @@ export default function SettingsPage() {
                   </div>
                 </div>
               </div>
+
+              <div
+                className="rounded-xl border p-4"
+                style={{ borderColor: "var(--color-border)" }}
+              >
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-1">
+                    <p
+                      className="text-sm font-medium"
+                      style={{ color: "var(--color-text-primary)" }}
+                    >
+                      USD → TRY Dönüşüm Kuru
+                    </p>
+                    <p
+                      className="text-xs"
+                      style={{ color: "var(--color-text-secondary)" }}
+                    >
+                      TRY merkezli fiyat, gelir ve maliyet gösteriminde kullanılacak tek merkez kur.
+                    </p>
+                  </div>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step={0.01}
+                    value={settings.usdTryRate ?? 39}
+                    onChange={(e) =>
+                      handleFloatField(
+                        "usdTryRate",
+                        Number(e.target.value || 0),
+                      )
+                    }
+                    className="w-full rounded-md border px-3 py-2 text-sm focus:outline-none md:max-w-[180px]"
+                    style={{
+                      borderColor: "var(--color-border)",
+                      backgroundColor: "var(--color-background)",
+                      color: "var(--color-text-primary)",
+                    }}
+                  />
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>
@@ -953,11 +1003,15 @@ export default function SettingsPage() {
                 Güvenlik
               </h2>
               <p className="mt-1 text-sm" style={{ color: "var(--color-text-secondary)" }}>
-                Oturum süresi ve hata ayıklama görünürlüğü.
+                Oturum, doğrulama ve kritik erişim korumaları.
               </p>
             </div>
-            <Badge variant={settings.debugMode ? "warning" : "secondary"}>
-              {settings.debugMode ? "Debug açık" : "Debug kapalı"}
+            <Badge variant={securityBadgeVariant}>
+              {settings.twoFactorRequired
+                ? "Ek doğrulama zorunlu"
+                : settings.debugMode
+                  ? "Debug açık"
+                  : "Standart koruma"}
             </Badge>
           </div>
 
@@ -1017,6 +1071,48 @@ export default function SettingsPage() {
                   description="Yeni kullanıcılar e-posta doğrulaması olmadan giriş yapamasın."
                   onClick={() => handleToggle("emailVerificationRequired")}
                 />
+                <Toggle
+                  checked={settings.twoFactorRequired ?? false}
+                  label="İki Adımlı Doğrulama Politikası"
+                  description="Yönetim tarafında ek kimlik doğrulama zorunluluğunu görünür kıl."
+                  onClick={() => handleToggle("twoFactorRequired")}
+                />
+              </div>
+
+              <div
+                className="rounded-xl border p-4"
+                style={{
+                  borderColor: "var(--color-border)",
+                  backgroundColor: "var(--color-surface)",
+                }}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <p
+                    className="text-sm font-semibold"
+                    style={{ color: "var(--color-text-primary)" }}
+                  >
+                    Güvenlik Duruşu
+                  </p>
+                  <Badge
+                    variant={
+                      settings.twoFactorRequired || settings.emailVerificationRequired
+                        ? "success"
+                        : "warning"
+                    }
+                  >
+                    {settings.twoFactorRequired || settings.emailVerificationRequired
+                      ? "Güçlü"
+                      : "Gözden geçir"}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                  {settings.twoFactorRequired
+                    ? "Ek doğrulama politikası görünür durumda. Login akışı ileride MFA challenge ile tamamlanmaya hazır."
+                    : "İki adımlı doğrulama şu an zorunlu değil. Özellikle admin ve org admin erişimleri için açılması önerilir."}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
                 <Toggle
                   checked={settings.passwordResetEnabled ?? true}
                   label="Şifre Sıfırlama"
@@ -1185,6 +1281,12 @@ export default function SettingsPage() {
               accentColor: isProduction ? "var(--color-success)" : "var(--color-warning)",
             },
             {
+              icon: Globe,
+              label: "USD/TRY",
+              value: settings.usdTryRate.toFixed(2),
+              accentColor: "var(--color-primary)",
+            },
+            {
               icon: Users,
               label: "Domain Politikası",
               value: allowedDomainCount > 0 ? `${allowedDomainCount} domain` : "Açık",
@@ -1269,6 +1371,11 @@ export default function SettingsPage() {
               label: "Uygulama",
               detail: settings.appVersion,
               badge: "outline",
+            },
+            {
+              label: "Kur",
+              detail: `1 USD = ${settings.usdTryRate.toFixed(2)} TRY`,
+              badge: "secondary",
             },
           ].map(({ label, detail, badge }) => (
             <div key={label} className="flex items-center justify-between gap-4 rounded-lg px-1 py-2">

@@ -6,6 +6,8 @@ export type SystemLogCategory =
   | "user"
   | "ai"
   | "system"
+  | "support"
+  | "usage"
   | "payment"
   | "billing"
   | "admin"

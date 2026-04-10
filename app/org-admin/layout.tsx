@@ -3,12 +3,15 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { OrgAdminSidebar } from "@/components/org-admin/OrgAdminSidebar";
 import type { ReactNode } from "react";
+import { SessionTimeoutManager } from "@/components/layout/SessionTimeoutManager";
+import { getSystemSettingsFromDb } from "@/lib/system-settings";
 
 export default async function OrgAdminLayout({
   children,
 }: {
   children: ReactNode;
 }) {
+  const settings = await getSystemSettingsFromDb();
   const supabase = await createClient();
   const {
     data: { user },
@@ -16,6 +19,16 @@ export default async function OrgAdminLayout({
 
   if (!user) {
     redirect("/login");
+  }
+
+  if (settings.emailVerificationRequired && !user.email_confirmed_at) {
+    const email = encodeURIComponent(user.email ?? "");
+    const name = encodeURIComponent(
+      typeof user.user_metadata?.name === "string"
+        ? user.user_metadata.name
+        : "MedAsi kullanıcısı",
+    );
+    redirect(`/verify-email?email=${email}&name=${name}`);
   }
 
   const dbUser = await prisma.user.findUnique({
@@ -89,6 +102,7 @@ export default async function OrgAdminLayout({
       className="min-h-screen flex"
       style={{ backgroundColor: "var(--color-background)" }}
     >
+      <SessionTimeoutManager timeoutMinutes={settings.sessionTimeoutMinutes} />
       <OrgAdminSidebar orgName={org.name} />
       <main className="flex-1 p-6 overflow-auto">{children}</main>
     </div>

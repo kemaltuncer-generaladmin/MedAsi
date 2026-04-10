@@ -17,6 +17,7 @@ import {
   sendVerificationEmail,
 } from "@/lib/email";
 import { grantFreeTokensOnSignup } from "@/lib/ai/check-limit";
+import { ensureUsageTrackingSchema } from "@/lib/db/schema-guard";
 import { z } from "zod";
 
 export type AuthActionResult = { success: boolean; error?: string };
@@ -41,11 +42,14 @@ const PACKAGE_MAP = {
   giris: "Giriş",
   pro: "Pro",
   enterprise: "Kurumsal",
+  kurumsal: "Kurumsal",
 } as const;
 
 type AuthFailureReason =
   | "invalid_input"
   | "invalid_credentials"
+  | "account_locked"
+  | "approval_pending"
   | "registration_closed"
   | "domain_not_allowed"
   | "daily_limit_reached"
@@ -54,6 +58,7 @@ type AuthFailureReason =
   | "admin_login_disabled"
   | "org_admin_login_disabled"
   | "admin_login_forbidden"
+  | "email_not_verified"
   | "supabase_error"
   | "unknown_error";
 
@@ -169,6 +174,61 @@ async function logAuthSuccess(
   });
 }
 
+function shouldCountFailedAttempt(message: string) {
+  const normalized = message.toLowerCase();
+  return (
+    normalized.includes("invalid login") ||
+    normalized.includes("invalid credentials") ||
+    normalized.includes("wrong password")
+  );
+}
+
+async function registerFailedLoginAttempt(
+  userId: string,
+  settings: Awaited<ReturnType<typeof getSystemSettingsFromDb>>,
+) {
+  const threshold = Math.max(1, settings.maxFailedLoginAttempts ?? 5);
+  const lockoutMinutes = Math.max(1, settings.lockoutMinutes ?? 15);
+
+  const updated = await prisma.user.update({
+    where: { id: userId },
+    data: {
+      failedLoginAttempts: {
+        increment: 1,
+      },
+    },
+    select: {
+      failedLoginAttempts: true,
+    },
+  });
+
+  if (updated.failedLoginAttempts < threshold) {
+    return null;
+  }
+
+  const lockedUntil = new Date(Date.now() + lockoutMinutes * 60 * 1000);
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      failedLoginAttempts: 0,
+      lockedUntil,
+    },
+  });
+
+  return lockedUntil;
+}
+
+async function clearLoginRiskState(userId: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      failedLoginAttempts: 0,
+      lockedUntil: null,
+      lastLoginAt: new Date(),
+    },
+  });
+}
+
 async function sendSignupVerificationEmail(
   email: string,
   name: string,
@@ -176,25 +236,31 @@ async function sendSignupVerificationEmail(
 ) {
   try {
     const supabase = createAdminSupabaseClient();
-    const redirectTo = `${await getOrigin()}/api/auth/callback?next=/setup`;
+    const origin = await getOrigin();
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "signup",
       email,
       password,
-      options: { redirectTo },
+      options: { redirectTo: `${origin}/setup` },
     });
     if (error) throw error;
 
+    const hashedToken = data?.properties?.hashed_token;
     const actionLink = data?.properties?.action_link;
     const otp = data?.properties?.email_otp ?? null;
-    if (!actionLink) {
+    if (!hashedToken && !actionLink) {
       throw new Error("Supabase verification link could not be generated");
     }
+
+    // PKCE-uyumlu confirm endpoint — code_verifier gerektirmez
+    const verificationLink = hashedToken
+      ? `${origin}/api/auth/confirm?token_hash=${encodeURIComponent(hashedToken)}&type=signup&next=/setup`
+      : actionLink!;
 
     await sendVerificationEmail({
       to: email,
       name,
-      verificationLink: actionLink,
+      verificationLink,
       verificationCode: otp,
     });
   } catch (error) {
@@ -212,6 +278,7 @@ export async function login(
   formData: FormData,
 ): Promise<AuthActionResult | void> {
   try {
+    await ensureUsageTrackingSchema();
     const raw = Object.fromEntries(formData);
     const loginMode =
       typeof raw.loginMode === "string" &&
@@ -229,10 +296,50 @@ export async function login(
       return { success: false, error: parsed.error.errors[0].message };
     }
 
-    const [supabase, settings] = await Promise.all([
+    const normalizedEmail = parsed.data.email.trim().toLowerCase();
+    const [supabase, settings, matchedDbUser] = await Promise.all([
       createClient(),
       getSystemSettingsFromDb(),
+      prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: {
+          id: true,
+          role: true,
+          lockedUntil: true,
+          accountApprovedAt: true,
+        },
+      }),
     ]);
+
+    if (matchedDbUser?.lockedUntil && matchedDbUser.lockedUntil > new Date()) {
+      await logAuthFailure(
+        "account_locked",
+        "Kilitli hesap girişi reddedildi",
+        `E-posta: ${maskEmail(normalizedEmail)}; Kilit bitişi: ${matchedDbUser.lockedUntil.toISOString()}`,
+        matchedDbUser.id,
+      );
+      return {
+        success: false,
+        error: "Hesabın geçici olarak kilitlendi. Lütfen biraz sonra tekrar dene.",
+      };
+    }
+
+    if (
+      settings.accountApprovalRequired &&
+      matchedDbUser &&
+      !matchedDbUser.accountApprovedAt
+    ) {
+      await logAuthFailure(
+        "approval_pending",
+        "Onay bekleyen hesap girişi reddedildi",
+        `E-posta: ${maskEmail(normalizedEmail)}`,
+        matchedDbUser.id,
+      );
+      return {
+        success: false,
+        error: "Hesabın henüz yönetici tarafından onaylanmadı.",
+      };
+    }
 
     if (loginMode === "admin" && !settings.adminLoginEnabled) {
       await logAuthFailure(
@@ -249,12 +356,25 @@ export async function login(
     const {
       data: { user },
       error,
-    } = await supabase.auth.signInWithPassword(parsed.data);
+    } = await supabase.auth.signInWithPassword({
+      email: normalizedEmail,
+      password: parsed.data.password,
+    });
     if (error) {
+      let lockMessage: string | null = null;
+      if (matchedDbUser && shouldCountFailedAttempt(error.message)) {
+        const lockedUntil = await registerFailedLoginAttempt(
+          matchedDbUser.id,
+          settings,
+        );
+        if (lockedUntil) {
+          lockMessage = "Çok fazla hatalı giriş denemesi. Hesap geçici olarak kilitlendi.";
+        }
+      }
       await logAuthFailure(
         "invalid_credentials",
         "Giriş başarısız",
-        `E-posta: ${maskEmail(parsed.data.email)}; Sebep: ${error.message}`,
+        `E-posta: ${maskEmail(normalizedEmail)}; Sebep: ${error.message}`,
       );
       // Kullanıcı dostu hata mesajları — teknik hata metinleri gösterme
       const msg = error.message.toLowerCase();
@@ -268,6 +388,9 @@ export async function login(
       } else if (msg.includes("user not found") || msg.includes("no user")) {
         friendlyError = "Bu e-posta adresiyle kayıtlı bir hesap bulunamadı.";
       }
+      if (lockMessage) {
+        friendlyError = lockMessage;
+      }
       return { success: false, error: friendlyError };
     }
 
@@ -276,7 +399,11 @@ export async function login(
     if (user) {
       const existingUser = await prisma.user.findUnique({
         where: { id: user.id },
-        select: { id: true, role: true },
+        select: {
+          id: true,
+          role: true,
+          accountApprovedAt: true,
+        },
       });
       const resolvedRole = existingUser?.role ?? "user";
       authenticatedRole = resolvedRole;
@@ -324,6 +451,24 @@ export async function login(
         };
       }
 
+      if (settings.emailVerificationRequired && !user.email_confirmed_at) {
+        await supabase.auth.signOut().catch(() => {});
+        await logAuthFailure(
+          "email_not_verified",
+          "Doğrulanmamış e-posta ile giriş reddedildi",
+          `E-posta: ${maskEmail(user.email)}`,
+          user.id,
+        );
+        return {
+          success: false,
+          error:
+            "E-posta adresin henüz doğrulanmamış. Gelen kutunu kontrol edip doğrulama bağlantısına tıkla.",
+        };
+      }
+
+      const isAccountApproved =
+        !settings.accountApprovalRequired || Boolean(existingUser?.accountApprovedAt);
+
       if (!existingUser) {
         const fallbackPackageName =
           resolvePackageNameFromAuthMetadata(user.user_metadata) ??
@@ -348,6 +493,7 @@ export async function login(
             name: user.user_metadata?.name || "",
             packageId: defaultPackage.id,
             role: "user",
+            accountApprovedAt: settings.accountApprovalRequired ? null : new Date(),
           },
         });
 
@@ -367,6 +513,22 @@ export async function login(
           );
         });
       }
+
+      if (!isAccountApproved) {
+        await supabase.auth.signOut().catch(() => {});
+        await logAuthFailure(
+          "approval_pending",
+          "Onay bekleyen hesap girişi reddedildi",
+          `E-posta: ${maskEmail(user.email)}`,
+          user.id,
+        );
+        return {
+          success: false,
+          error: "Hesabın henüz yönetici tarafından onaylanmadı.",
+        };
+      }
+
+      await clearLoginRiskState(user.id).catch(() => {});
 
       await logAuthSuccess(
         "Giriş başarılı",
@@ -411,6 +573,7 @@ export async function register(
   formData: FormData,
 ): Promise<AuthActionResult | void> {
   try {
+    await ensureUsageTrackingSchema();
     const raw = Object.fromEntries(formData);
     const parsed = registerSchema.safeParse(raw);
     if (!parsed.success) {
@@ -581,6 +744,7 @@ export async function register(
           legalConsentVersion: LEGAL_CONSENT_VERSION,
           legalConsentIp: consentIp,
           legalConsentUserAgent: consentUserAgent,
+          accountApprovedAt: settings.accountApprovalRequired ? null : consentAt,
           ...(couponRecord && {
             couponUsed: couponRecord.code,
             subscriptionExpiresAt,
@@ -598,6 +762,7 @@ export async function register(
           legalConsentVersion: LEGAL_CONSENT_VERSION,
           legalConsentIp: consentIp,
           legalConsentUserAgent: consentUserAgent,
+          accountApprovedAt: settings.accountApprovalRequired ? null : consentAt,
           ...(couponRecord && {
             couponUsed: couponRecord.code,
             subscriptionExpiresAt,
@@ -651,15 +816,48 @@ export async function register(
         );
       }
 
-      await sendSignupVerificationEmail(
-        parsed.data.email,
-        parsed.data.name,
-        parsed.data.password,
+      if (settings.emailVerificationRequired) {
+        await sendSignupVerificationEmail(
+          parsed.data.email,
+          parsed.data.name,
+          parsed.data.password,
+        );
+      } else {
+        try {
+          const adminSupabase = createAdminSupabaseClient();
+          const { error: confirmError } = await adminSupabase.auth.admin.updateUserById(
+            signupUserId,
+            { email_confirm: true },
+          );
+          if (confirmError) {
+            throw confirmError;
+          }
+        } catch (confirmError) {
+          await logAuthFailure(
+            "supabase_error",
+            "Otomatik e-posta onayı yapılamadı",
+            `E-posta: ${maskEmail(parsed.data.email)}; Sebep: ${
+              confirmError instanceof Error ? confirmError.message : "Unknown error"
+            }`,
+            signupUserId,
+          );
+        }
+      }
+    }
+
+    await supabase.auth.signOut().catch(() => {});
+
+    if (settings.emailVerificationRequired) {
+      redirect(
+        `/verify-email?email=${encodeURIComponent(parsed.data.email)}&name=${encodeURIComponent(parsed.data.name)}`,
       );
     }
 
+    const approvalQuery = settings.accountApprovalRequired
+      ? "&approval=pending"
+      : "";
     redirect(
-      `/verify-email?email=${encodeURIComponent(parsed.data.email)}&name=${encodeURIComponent(parsed.data.name)}`,
+      `/login?registered=true${approvalQuery}`,
     );
   } catch (err) {
     if (isRedirectError(err)) {
@@ -694,6 +892,19 @@ export async function requestPasswordReset(
     }
 
     const email = parsed.data.email.trim().toLowerCase();
+    const settings = await getSystemSettingsFromDb();
+    if (!settings.passwordResetEnabled) {
+      await logAuthFailure(
+        "registration_closed",
+        "Şifre sıfırlama isteği reddedildi",
+        `E-posta: ${maskEmail(email)}; Sebep: şifre sıfırlama akışı sistem ayarlarında kapalı`,
+      );
+      return {
+        success: false,
+        error: "Şifre sıfırlama özelliği şu anda geçici olarak kapalı.",
+      };
+    }
+
     const supabase = createAdminSupabaseClient();
     const redirectTo = `${await getOrigin()}/api/auth/callback?next=/reset-password`;
 

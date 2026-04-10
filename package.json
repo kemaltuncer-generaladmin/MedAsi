@@ -4,10 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
+    "build": "sh -c 'export DIRECT_URL=\"${DIRECT_URL:-$DATABASE_URL}\"; prisma migrate resolve --rolled-back 20260410120000_add_missing_rag_rpc_functions >/dev/null 2>&1 || true; prisma migrate deploy; next build'",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --cache",
     "typecheck": "tsc --noEmit",
+    "secret:scan": "node scripts/secret-scan.mjs",
     "postinstall": "prisma generate",
     "rag:scan": "node scripts/ingest-books.js",
     "rag:watch": "node scripts/watch-rag-folder.js",

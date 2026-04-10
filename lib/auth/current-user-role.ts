@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 type SupabaseUser = {
   id: string;
   email?: string | null;
+  email_confirmed_at?: string | null;
   user_metadata?: Record<string, unknown> | null;
 };
 

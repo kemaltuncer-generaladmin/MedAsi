@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
+import { getCurrencySettings, formatUsd } from "@/lib/currency";
 import {
   Brain,
   Users,
@@ -21,7 +22,10 @@ function daysLeft(exp: Date) {
 }
 
 export default async function OrgAdminPage() {
-  const supabase = await createClient();
+  const [supabase, currency] = await Promise.all([
+    createClient(),
+    getCurrencySettings(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -143,8 +147,8 @@ export default async function OrgAdminPage() {
         />
         <StatCard
           title="Bu Ay Maliyet"
-          value={`$${fmt(monthCost, 4)}`}
-          sub="Gerçek API maliyeti"
+          value={currency.formatTryFromUsd(monthCost)}
+          sub={formatUsd(monthCost)}
           icon={DollarSign}
           color="var(--color-destructive)"
         />
@@ -183,8 +187,7 @@ export default async function OrgAdminPage() {
               className="text-sm font-mono"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              ${fmt(monthCost, 3)} / ${fmt(org.monthlyBudgetUsd!, 2)} (
-              {budgetPct}%)
+              {currency.formatTryFromUsd(monthCost)} / {currency.formatTryFromUsd(org.monthlyBudgetUsd!)} ({budgetPct}%)
             </p>
           </div>
           <div
@@ -431,7 +434,7 @@ export default async function OrgAdminPage() {
                     className="px-5 py-2.5 text-xs font-mono"
                     style={{ color: "var(--color-warning)" }}
                   >
-                    ${u.costUsd.toFixed(5)}
+                    {currency.formatTryFromUsd(u.costUsd)}
                   </td>
                   <td
                     className="px-5 py-2.5 text-xs"

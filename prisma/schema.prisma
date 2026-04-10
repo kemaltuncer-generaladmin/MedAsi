@@ -14,6 +14,10 @@ model User {
   name                     String?
   packageId                String                  @map("package_id")
   role                     String                  @default("user")
+  accountApprovedAt        DateTime?               @map("account_approved_at")
+  failedLoginAttempts      Int                     @default(0) @map("failed_login_attempts")
+  lockedUntil              DateTime?               @map("locked_until")
+  lastLoginAt              DateTime?               @map("last_login_at")
   createdAt                DateTime                @default(now()) @map("created_at")
   goals                    Json?
   interests                Json?
@@ -43,6 +47,38 @@ model User {
   tokenTransactions        TokenTransaction[]
   dashboardPreferences     DashboardPreferences?
   studySessions            StudySession[]
+  addonAccesses            UserAddonAccess[]       @relation("UserAddonAccessUser")
+  grantedAddonAccesses     UserAddonAccess[]       @relation("UserAddonAccessGrantedBy")
+  supportTickets           SupportTicket[]         @relation("SupportTicketOwner")
+  assignedSupportTickets   SupportTicket[]         @relation("SupportTicketAssignedAdmin")
+  supportTicketMessages    SupportTicketMessage[]  @relation("SupportTicketMessageAuthor")
+  supportTicketNotesAuthored SupportTicketNote[]   @relation("SupportTicketNoteAuthor")
+  supportTicketAuditsAuthored SupportTicketAudit[] @relation("SupportTicketAuditActor")
+  academicProfile          UserAcademicProfile?
+  communitySpacesOwned     CommunitySpace[]        @relation("CommunitySpaceOwner")
+  communityThreadsAuthored CommunityThread[]       @relation("CommunityThreadAuthor")
+  communityPostsAuthored   CommunityPost[]         @relation("CommunityPostAuthor")
+  communityResourcesAuthored CommunityResource[]   @relation("CommunityResourceAuthor")
+  communityReactions       CommunityReaction[]
+  communityBookmarks       CommunityBookmark[]
+  communityFollows         CommunityFollow[]
+  communityChatsCreated    CommunityGroupChat[]    @relation("CommunityChatCreator")
+  communityChatMemberships CommunityChatMember[]
+  communityChatMessages    CommunityChatMessage[]  @relation("CommunityChatMessageAuthor")
+  communityMessageReads    CommunityMessageRead[]
+  communityReportsFiled    CommunityReport[]       @relation("CommunityReportReporter")
+  communityReportsAssigned CommunityReport[]       @relation("CommunityReportModerator")
+  communityModerationActionsAuthored CommunityModerationAction[] @relation("CommunityModerationActor")
+  communityRoleAssignments CommunityRoleAssignment[] @relation("CommunityRoleAssignee")
+  communityRoleAssignmentsGranted CommunityRoleAssignment[] @relation("CommunityRoleGrantor")
+  communityBlocksInitiated CommunityBlock[]        @relation("CommunityBlocker")
+  communityBlocksReceived  CommunityBlock[]        @relation("CommunityBlocked")
+  communityMutes           CommunityMute[]         @relation("CommunityMuteUser")
+  communityMuteTargets     CommunityMute[]         @relation("CommunityMutedUser")
+  communityBansReceived    CommunityBan[]          @relation("CommunityBannedUser")
+  communityBansIssued      CommunityBan[]          @relation("CommunityBanActor")
+  communityNotifications   CommunityNotification[]
+  moduleActivities         ModuleActivity[]
 
   @@map("users")
 }
@@ -403,6 +439,103 @@ model ActivePlan {
   updatedAt DateTime @updatedAt
 }
 
+model UserAddonAccess {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  moduleKey       String    @map("module_key")
+  reason          String?   @db.Text
+  expiresAt       DateTime? @map("expires_at")
+  grantedByUserId String?   @map("granted_by_user_id")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  user          User  @relation("UserAddonAccessUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedByUser User? @relation("UserAddonAccessGrantedBy", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, moduleKey])
+  @@index([userId, expiresAt])
+  @@map("user_addon_access")
+}
+
+model SupportTicket {
+  id                  String               @id @default(uuid())
+  userId              String               @map("user_id")
+  subject             String
+  category            String?
+  status              String               @default("open")
+  priority            String               @default("normal")
+  adminNotes          String?              @map("admin_notes") @db.Text
+  assignedAdminUserId String?              @map("assigned_admin_user_id")
+  firstResponseAt     DateTime?            @map("first_response_at")
+  lastResponseAt      DateTime?            @map("last_response_at")
+  resolvedAt          DateTime?            @map("resolved_at")
+  closedAt            DateTime?            @map("closed_at")
+  closeReason         String?              @map("close_reason") @db.Text
+  createdAt           DateTime             @default(now()) @map("created_at")
+  updatedAt           DateTime             @updatedAt @map("updated_at")
+
+  user          User                @relation("SupportTicketOwner", fields: [userId], references: [id], onDelete: Cascade)
+  assignedAdmin User?               @relation("SupportTicketAssignedAdmin", fields: [assignedAdminUserId], references: [id], onDelete: SetNull)
+  messages      SupportTicketMessage[]
+  notes         SupportTicketNote[]
+  audits        SupportTicketAudit[]
+
+  @@index([userId, createdAt])
+  @@index([status, priority])
+  @@index([assignedAdminUserId, status, updatedAt])
+  @@map("support_tickets")
+}
+
+model SupportTicketMessage {
+  id           String        @id @default(uuid())
+  ticketId     String        @map("ticket_id")
+  authorUserId String        @map("author_user_id")
+  body         String        @db.Text
+  isAdmin      Boolean       @default(false) @map("is_admin")
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUser User          @relation("SupportTicketMessageAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("support_ticket_messages")
+}
+
+model SupportTicketNote {
+  id           String        @id @default(uuid())
+  ticketId     String        @map("ticket_id")
+  authorUserId String        @map("author_user_id")
+  body         String        @db.Text
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  ticket     SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  authorUser User          @relation("SupportTicketNoteAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("support_ticket_notes")
+}
+
+model SupportTicketAudit {
+  id           String        @id @default(uuid())
+  ticketId     String        @map("ticket_id")
+  actorUserId  String?       @map("actor_user_id")
+  action       String
+  fromStatus   String?       @map("from_status")
+  toStatus     String?       @map("to_status")
+  details      String?       @db.Text
+  createdAt    DateTime      @default(now()) @map("created_at")
+
+  ticket    SupportTicket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  actorUser User?         @relation("SupportTicketAuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([ticketId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([action, createdAt])
+  @@map("support_ticket_audits")
+}
+
 model TokenWallet {
   id           String             @id @default(uuid())
   userId       String             @unique @map("user_id")
@@ -452,6 +585,515 @@ model TokenPackage {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("token_packages")
+}
+
+model ModuleActivity {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  module    String
+  action    String
+  path      String
+  metadata  Json?
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([module, createdAt])
+  @@index([action, createdAt])
+  @@map("module_activities")
+}
+
+model University {
+  id            String               @id @default(uuid())
+  name          String
+  slug          String               @unique
+  city          String?
+  isActive      Boolean              @default(true) @map("is_active")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  programs      Program[]
+  emailDomains  UniversityEmailDomain[]
+  academicProfiles UserAcademicProfile[]
+  spaces        CommunitySpace[]
+  resources     CommunityResource[]
+  roleAssignments CommunityRoleAssignment[]
+  bans          CommunityBan[]
+
+  @@index([isActive])
+  @@map("universities")
+}
+
+model UniversityEmailDomain {
+  id           String     @id @default(uuid())
+  universityId String     @map("university_id")
+  domain       String     @unique
+  isActive     Boolean    @default(true) @map("is_active")
+  createdAt    DateTime   @default(now()) @map("created_at")
+
+  university University @relation(fields: [universityId], references: [id], onDelete: Cascade)
+
+  @@index([universityId, isActive])
+  @@map("university_email_domains")
+}
+
+model Program {
+  id            String               @id @default(uuid())
+  universityId  String               @map("university_id")
+  name          String
+  slug          String
+  degreeType    String               @default("medicine") @map("degree_type")
+  isActive      Boolean              @default(true) @map("is_active")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  university    University           @relation(fields: [universityId], references: [id], onDelete: Cascade)
+  terms         AcademicTerm[]
+  courses       Course[]
+  academicProfiles UserAcademicProfile[]
+  spaces        CommunitySpace[]
+  resources     CommunityResource[]
+  roleAssignments CommunityRoleAssignment[]
+  bans          CommunityBan[]
+
+  @@unique([universityId, slug])
+  @@index([universityId, isActive])
+  @@map("programs")
+}
+
+model AcademicTerm {
+  id            String               @id @default(uuid())
+  programId     String               @map("program_id")
+  name          String
+  code          String
+  sortOrder     Int                  @default(0) @map("sort_order")
+  isActive      Boolean              @default(true) @map("is_active")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  program       Program              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  courses       Course[]
+  academicProfiles UserAcademicProfile[]
+  spaces        CommunitySpace[]
+  resources     CommunityResource[]
+  roleAssignments CommunityRoleAssignment[]
+  bans          CommunityBan[]
+
+  @@unique([programId, code])
+  @@index([programId, sortOrder])
+  @@map("academic_terms")
+}
+
+model Course {
+  id            String               @id @default(uuid())
+  programId     String               @map("program_id")
+  termId        String?              @map("term_id")
+  name          String
+  slug          String
+  courseType    String               @default("course") @map("course_type")
+  isActive      Boolean              @default(true) @map("is_active")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  program       Program              @relation(fields: [programId], references: [id], onDelete: Cascade)
+  term          AcademicTerm?        @relation(fields: [termId], references: [id], onDelete: SetNull)
+  spaces        CommunitySpace[]
+  resources     CommunityResource[]
+  roleAssignments CommunityRoleAssignment[]
+  bans          CommunityBan[]
+
+  @@unique([programId, slug])
+  @@index([programId, termId])
+  @@map("courses")
+}
+
+model UserAcademicProfile {
+  id                String       @id @default(uuid())
+  userId            String       @unique @map("user_id")
+  universityId      String?      @map("university_id")
+  programId         String?      @map("program_id")
+  termId            String?      @map("term_id")
+  specialty         String?      @map("specialty")
+  studentNoHash     String?      @map("student_no_hash")
+  verificationStatus String      @default("pending") @map("verification_status")
+  verifiedAt        DateTime?    @map("verified_at")
+  visibilityLevel   String       @default("verified_only") @map("visibility_level")
+  createdAt         DateTime     @default(now()) @map("created_at")
+  updatedAt         DateTime     @updatedAt @map("updated_at")
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  university        University?  @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  program           Program?     @relation(fields: [programId], references: [id], onDelete: SetNull)
+  term              AcademicTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
+
+  @@index([universityId, programId, termId])
+  @@index([verificationStatus])
+  @@map("user_academic_profiles")
+}
+
+model CommunitySpace {
+  id            String       @id @default(uuid())
+  type          String
+  title         String
+  slug          String       @unique
+  description   String?
+  accessType    String       @default("public") @map("access_type")
+  status        String       @default("active")
+  universityId  String?      @map("university_id")
+  programId     String?      @map("program_id")
+  termId        String?      @map("term_id")
+  courseId      String?      @map("course_id")
+  ownerUserId   String?      @map("owner_user_id")
+  createdAt     DateTime     @default(now()) @map("created_at")
+  updatedAt     DateTime     @updatedAt @map("updated_at")
+  university    University?  @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  program       Program?     @relation(fields: [programId], references: [id], onDelete: SetNull)
+  term          AcademicTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  course        Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  ownerUser     User?        @relation("CommunitySpaceOwner", fields: [ownerUserId], references: [id], onDelete: SetNull)
+  threads       CommunityThread[]
+  resources     CommunityResource[]
+  chats         CommunityGroupChat[]
+  roleAssignments CommunityRoleAssignment[]
+
+  @@index([type, status])
+  @@index([universityId, programId, termId, courseId])
+  @@map("community_spaces")
+}
+
+model CommunityThread {
+  id              String       @id @default(uuid())
+  spaceId         String       @map("space_id")
+  authorId        String       @map("author_id")
+  title           String
+  description     String?
+  contentType     String       @map("content_type")
+  visibilityScope String       @default("global") @map("visibility_scope")
+  status          String       @default("active")
+  tags            Json         @default("[]")
+  isPinned        Boolean      @default(false) @map("is_pinned")
+  isLocked        Boolean      @default(false) @map("is_locked")
+  containsSpoiler Boolean      @default(false) @map("contains_spoiler")
+  bestAnswerPostId String?     @map("best_answer_post_id")
+  attachedMaterialId String?   @map("attached_material_id")
+  postCount       Int          @default(0) @map("post_count")
+  reactionCount   Int          @default(0) @map("reaction_count")
+  lastActivityAt  DateTime     @default(now()) @map("last_activity_at")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  space           CommunitySpace @relation(fields: [spaceId], references: [id], onDelete: Cascade)
+  author          User         @relation("CommunityThreadAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  posts           CommunityPost[]
+
+  @@index([spaceId, lastActivityAt])
+  @@index([authorId, createdAt])
+  @@index([contentType, status])
+  @@map("community_threads")
+}
+
+model CommunityPost {
+  id            String        @id @default(uuid())
+  threadId       String       @map("thread_id")
+  authorId       String       @map("author_id")
+  body           String       @db.Text
+  quotedPostId   String?      @map("quoted_post_id")
+  status         String       @default("active")
+  isBestAnswer   Boolean      @default(false) @map("is_best_answer")
+  editSummary    Json?
+  createdAt      DateTime     @default(now()) @map("created_at")
+  updatedAt      DateTime     @updatedAt @map("updated_at")
+  thread         CommunityThread @relation(fields: [threadId], references: [id], onDelete: Cascade)
+  author         User         @relation("CommunityPostAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  quotedPost     CommunityPost? @relation("CommunityPostQuote", fields: [quotedPostId], references: [id], onDelete: SetNull)
+  replies        CommunityPost[] @relation("CommunityPostQuote")
+
+  @@index([threadId, createdAt])
+  @@index([authorId, createdAt])
+  @@map("community_posts")
+}
+
+model CommunityResource {
+  id              String       @id @default(uuid())
+  spaceId         String?      @map("space_id")
+  authorId        String       @map("author_id")
+  title           String
+  description     String?
+  resourceType    String       @default("file") @map("resource_type")
+  visibilityScope String       @default("global") @map("visibility_scope")
+  status          String       @default("active")
+  url             String?
+  filePath        String?      @map("file_path")
+  linkedMaterialId String?     @map("linked_material_id")
+  universityId    String?      @map("university_id")
+  programId       String?      @map("program_id")
+  termId          String?      @map("term_id")
+  courseId        String?      @map("course_id")
+  tags            Json         @default("[]")
+  qualityScore    Int          @default(0) @map("quality_score")
+  downloadCount   Int          @default(0) @map("download_count")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+  space           CommunitySpace? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  author          User         @relation("CommunityResourceAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  university      University?  @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  program         Program?     @relation(fields: [programId], references: [id], onDelete: SetNull)
+  term            AcademicTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  course          Course?      @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([spaceId, createdAt])
+  @@index([courseId, qualityScore])
+  @@index([authorId, createdAt])
+  @@map("community_resources")
+}
+
+model CommunityReaction {
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  targetType   String    @map("target_type")
+  targetId     String    @map("target_id")
+  reactionType String    @map("reaction_type")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId, reactionType])
+  @@index([targetType, targetId])
+  @@map("community_reactions")
+}
+
+model CommunityBookmark {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  targetType String    @map("target_type")
+  targetId   String    @map("target_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@map("community_bookmarks")
+}
+
+model CommunityFollow {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  targetType String    @map("target_type")
+  targetId   String    @map("target_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, targetType, targetId])
+  @@index([targetType, targetId])
+  @@map("community_follows")
+}
+
+model CommunityGroupChat {
+  id              String      @id @default(uuid())
+  spaceId         String?     @map("space_id")
+  createdByUserId String      @map("created_by_user_id")
+  title           String
+  description     String?
+  isDirectMessage Boolean     @default(false) @map("is_direct_message")
+  status          String      @default("active")
+  lastMessageAt   DateTime?   @map("last_message_at")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  space           CommunitySpace? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  createdByUser   User        @relation("CommunityChatCreator", fields: [createdByUserId], references: [id], onDelete: Cascade)
+  members         CommunityChatMember[]
+  messages        CommunityChatMessage[]
+
+  @@index([spaceId, status])
+  @@index([isDirectMessage, lastMessageAt])
+  @@map("community_group_chats")
+}
+
+model CommunityChatMember {
+  id          String      @id @default(uuid())
+  chatId       String     @map("chat_id")
+  userId       String     @map("user_id")
+  role         String     @default("member")
+  status       String     @default("active")
+  joinedAt     DateTime   @default(now()) @map("joined_at")
+  lastReadAt   DateTime?  @map("last_read_at")
+  mutedUntil   DateTime?  @map("muted_until")
+  chat         CommunityGroupChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user         User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chatId, userId])
+  @@index([userId, status])
+  @@map("community_chat_members")
+}
+
+model CommunityChatMessage {
+  id              String      @id @default(uuid())
+  chatId          String      @map("chat_id")
+  authorUserId    String      @map("author_user_id")
+  body            String      @db.Text
+  messageType     String      @default("text") @map("message_type")
+  attachment      Json?
+  replyToMessageId String?    @map("reply_to_message_id")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+  chat            CommunityGroupChat @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  authorUser      User        @relation("CommunityChatMessageAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  replyToMessage  CommunityChatMessage? @relation("CommunityChatReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies         CommunityChatMessage[] @relation("CommunityChatReply")
+  reads           CommunityMessageRead[]
+
+  @@index([chatId, createdAt])
+  @@index([authorUserId, createdAt])
+  @@map("community_chat_messages")
+}
+
+model CommunityMessageRead {
+  id         String      @id @default(uuid())
+  messageId  String      @map("message_id")
+  userId     String      @map("user_id")
+  readAt     DateTime    @default(now()) @map("read_at")
+  message    CommunityChatMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([messageId, userId])
+  @@index([userId, readAt])
+  @@map("community_message_reads")
+}
+
+model CommunityReportReason {
+  id          String     @id @default(uuid())
+  key         String     @unique
+  label       String
+  description String?
+  severity    String     @default("medium")
+  isActive    Boolean    @default(true) @map("is_active")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  reports     CommunityReport[]
+
+  @@index([isActive, severity])
+  @@map("community_report_reasons")
+}
+
+model CommunityReport {
+  id                 String      @id @default(uuid())
+  reporterUserId     String      @map("reporter_user_id")
+  reasonId           String?     @map("reason_id")
+  targetType         String      @map("target_type")
+  targetId           String      @map("target_id")
+  details            String?     @db.Text
+  status             String      @default("open")
+  assignedModeratorUserId String? @map("assigned_moderator_user_id")
+  resolutionNotes    String?     @map("resolution_notes") @db.Text
+  createdAt          DateTime    @default(now()) @map("created_at")
+  resolvedAt         DateTime?   @map("resolved_at")
+  reporterUser       User        @relation("CommunityReportReporter", fields: [reporterUserId], references: [id], onDelete: Cascade)
+  reason             CommunityReportReason? @relation(fields: [reasonId], references: [id], onDelete: SetNull)
+  assignedModerator  User?       @relation("CommunityReportModerator", fields: [assignedModeratorUserId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+  @@index([targetType, targetId])
+  @@map("community_reports")
+}
+
+model CommunityModerationAction {
+  id            String    @id @default(uuid())
+  actorUserId    String   @map("actor_user_id")
+  targetType     String   @map("target_type")
+  targetId       String   @map("target_id")
+  targetUserId   String?  @map("target_user_id")
+  actionType     String   @map("action_type")
+  reason         String?  @db.Text
+  metadata       Json?
+  createdAt      DateTime @default(now()) @map("created_at")
+  actorUser      User     @relation("CommunityModerationActor", fields: [actorUserId], references: [id], onDelete: Cascade)
+
+  @@index([targetType, targetId])
+  @@index([actionType, createdAt])
+  @@map("community_moderation_actions")
+}
+
+model CommunityRoleAssignment {
+  id            String      @id @default(uuid())
+  userId        String      @map("user_id")
+  role          String
+  universityId  String?     @map("university_id")
+  programId     String?     @map("program_id")
+  termId        String?     @map("term_id")
+  courseId      String?     @map("course_id")
+  spaceId       String?     @map("space_id")
+  grantedByUserId String?   @map("granted_by_user_id")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  expiresAt     DateTime?   @map("expires_at")
+  user          User        @relation("CommunityRoleAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  university    University? @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  program       Program?    @relation(fields: [programId], references: [id], onDelete: SetNull)
+  term          AcademicTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  course        Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  space         CommunitySpace? @relation(fields: [spaceId], references: [id], onDelete: SetNull)
+  grantedByUser User?       @relation("CommunityRoleGrantor", fields: [grantedByUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, role])
+  @@index([role, universityId, courseId])
+  @@map("community_role_assignments")
+}
+
+model CommunityBlock {
+  id            String    @id @default(uuid())
+  blockerUserId String    @map("blocker_user_id")
+  blockedUserId String    @map("blocked_user_id")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  blockerUser   User      @relation("CommunityBlocker", fields: [blockerUserId], references: [id], onDelete: Cascade)
+  blockedUser   User      @relation("CommunityBlocked", fields: [blockedUserId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerUserId, blockedUserId])
+  @@index([blockedUserId])
+  @@map("community_blocks")
+}
+
+model CommunityMute {
+  id            String    @id @default(uuid())
+  userId        String    @map("user_id")
+  targetType    String    @map("target_type")
+  targetId      String?   @map("target_id")
+  mutedUserId   String?   @map("muted_user_id")
+  expiresAt     DateTime? @map("expires_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  user          User      @relation("CommunityMuteUser", fields: [userId], references: [id], onDelete: Cascade)
+  mutedUser     User?     @relation("CommunityMutedUser", fields: [mutedUserId], references: [id], onDelete: SetNull)
+
+  @@index([userId, targetType])
+  @@map("community_mutes")
+}
+
+model CommunityBan {
+  id            String      @id @default(uuid())
+  userId        String      @map("user_id")
+  scopeType     String      @default("global") @map("scope_type")
+  universityId  String?     @map("university_id")
+  programId     String?     @map("program_id")
+  termId        String?     @map("term_id")
+  courseId      String?     @map("course_id")
+  imposedByUserId String    @map("imposed_by_user_id")
+  reason        String?     @db.Text
+  status        String      @default("active")
+  startsAt      DateTime    @default(now()) @map("starts_at")
+  expiresAt     DateTime?   @map("expires_at")
+  createdAt     DateTime    @default(now()) @map("created_at")
+  user          User        @relation("CommunityBannedUser", fields: [userId], references: [id], onDelete: Cascade)
+  university    University? @relation(fields: [universityId], references: [id], onDelete: SetNull)
+  program       Program?    @relation(fields: [programId], references: [id], onDelete: SetNull)
+  term          AcademicTerm? @relation(fields: [termId], references: [id], onDelete: SetNull)
+  course        Course?     @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  imposedByUser User        @relation("CommunityBanActor", fields: [imposedByUserId], references: [id], onDelete: Cascade)
+
+  @@index([userId, status])
+  @@index([scopeType, expiresAt])
+  @@map("community_bans")
+}
+
+model CommunityNotification {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  type       String
+  title      String
+  body       String?
+  href       String?
+  isRead     Boolean   @default(false) @map("is_read")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead, createdAt])
+  @@map("community_notifications")
 }
 
 model SystemSetting {

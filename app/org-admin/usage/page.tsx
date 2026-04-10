@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Brain, DollarSign, TrendingUp } from "lucide-react";
+import { getCurrencySettings, formatUsd } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -18,7 +19,10 @@ function fmtDate(d: Date) {
 }
 
 export default async function OrgUsagePage() {
-  const supabase = await createClient();
+  const [supabase, currency] = await Promise.all([
+    createClient(),
+    getCurrencySettings(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -118,7 +122,7 @@ export default async function OrgUsagePage() {
             style={{ color: "var(--color-text-secondary)" }}
           >
             {(
-              monthAgg._sum.inputTokens ?? 0 + (monthAgg._sum.outputTokens ?? 0)
+              (monthAgg._sum.inputTokens ?? 0) + (monthAgg._sum.outputTokens ?? 0)
             ).toLocaleString()}{" "}
             token
           </p>
@@ -146,13 +150,13 @@ export default async function OrgUsagePage() {
             className="text-2xl font-bold"
             style={{ color: "var(--color-text-primary)" }}
           >
-            ${fmt(monthAgg._sum.costUsd ?? 0, 4)}
+            {currency.formatTryFromUsd(monthAgg._sum.costUsd ?? 0)}
           </p>
           <p
             className="text-xs mt-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            Gerçek API maliyeti
+            {formatUsd(monthAgg._sum.costUsd ?? 0)}
           </p>
         </div>
         <div
@@ -184,7 +188,7 @@ export default async function OrgUsagePage() {
             className="text-xs mt-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            ${fmt(totalCost, 4)} toplam
+            {currency.formatTryFromUsd(totalCost)} toplam
           </p>
         </div>
       </div>
@@ -275,7 +279,7 @@ export default async function OrgUsagePage() {
                         className="px-5 py-3 text-sm font-mono"
                         style={{ color: "var(--color-warning)" }}
                       >
-                        ${fmt(u._sum.costUsd ?? 0, 5)}
+                        {currency.formatTryFromUsd(u._sum.costUsd ?? 0)}
                       </td>
                     </tr>
                   );
@@ -350,8 +354,8 @@ export default async function OrgUsagePage() {
                     <td
                       className="px-5 py-3 text-sm font-mono"
                       style={{ color: "var(--color-warning)" }}
-                    >
-                      ${fmt(m._sum.costUsd ?? 0, 5)}
+                      >
+                      {currency.formatTryFromUsd(m._sum.costUsd ?? 0)}
                     </td>
                   </tr>
                 ))}
@@ -442,7 +446,7 @@ export default async function OrgUsagePage() {
                     className="px-4 py-2 text-xs font-mono"
                     style={{ color: "var(--color-warning)" }}
                   >
-                    ${fmt(u.costUsd, 6)}
+                    {currency.formatTryFromUsd(u.costUsd)}
                   </td>
                   <td
                     className="px-4 py-2 text-xs"

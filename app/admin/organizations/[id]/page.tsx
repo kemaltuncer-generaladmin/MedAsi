@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { getCurrencySettings } from "@/lib/currency";
 import {
   ArrowLeft,
   Users,
@@ -60,7 +61,7 @@ export default async function OrgDetailPage({
   if (!org) notFound();
 
   // Tüm zamanlar ve bu ay için özet
-  const [allTime, thisMonth, budget, recentUsage] = await Promise.all([
+  const [allTime, thisMonth, budget, recentUsage, currency] = await Promise.all([
     getOrgBillingSummary(org.id),
     getOrgBillingSummary(
       org.id,
@@ -74,6 +75,7 @@ export default async function OrgDetailPage({
       take: 10,
       include: { user: true },
     }),
+    getCurrencySettings(),
   ]);
 
   const days = daysLeft(org.expiresAt);
@@ -166,15 +168,15 @@ export default async function OrgDetailPage({
           title="Toplam Maliyet (tüm)"
           icon={DollarSign}
           color="var(--color-warning)"
-          value={`$${fmt(allTime.totalCostUsd, 4)}`}
+          value={currency.formatTryFromUsd(allTime.totalCostUsd)}
           sub={`${allTime.totalCalls} AI sorgusu`}
         />
         <StatCard
           title="Bu Ay Gelir"
           icon={TrendingUp}
           color="var(--color-success)"
-          value={`$${fmt(thisMonth.revenueUsd)}`}
-          sub={`+$${fmt(thisMonth.profitUsd)} kâr (%${org.markupPct} marj)`}
+          value={currency.formatTryFromUsd(thisMonth.revenueUsd)}
+          sub={`+${currency.formatTryFromUsd(thisMonth.profitUsd)} kâr (%${org.markupPct} marj)`}
         />
         <StatCard
           title="Aktif Üye"
@@ -216,8 +218,7 @@ export default async function OrgDetailPage({
               className="text-sm font-mono"
               style={{ color: "var(--color-text-secondary)" }}
             >
-              ${fmt(budget.usedUsd, 3)} / ${fmt(budget.budgetUsd)} ({budget.pct}
-              %)
+              {currency.formatTryFromUsd(budget.usedUsd)} / {currency.formatTryFromUsd(budget.budgetUsd)} ({budget.pct}%)
             </p>
           </div>
           <div
@@ -453,7 +454,7 @@ export default async function OrgDetailPage({
                     className="px-5 py-2.5 text-xs font-mono"
                     style={{ color: "var(--color-warning)" }}
                   >
-                    ${fmt(u.costUsd, 5)}
+                    {currency.formatTryFromUsd(u.costUsd)}
                   </td>
                   <td
                     className="px-5 py-2.5 text-xs"

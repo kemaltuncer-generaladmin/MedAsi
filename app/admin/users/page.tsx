@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useMemo, useCallback } from 'react'
+import React, { useDeferredValue, useEffect, useState, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import {
   Search,
@@ -19,10 +19,14 @@ import {
   PackageOpen,
   Eye,
   Trash2,
+  MailCheck,
+  KeyRound,
+  Coins,
 } from 'lucide-react'
+import toast from 'react-hot-toast'
 import { Badge, badgeVariants } from '@/components/ui/Badge'
 import { Button } from '@/components/ui/Button'
-import { getUsers, updateUserRole, updateUserPackage, getPackages, createUser } from '@/lib/actions/admin'
+import { getUsers, updateUserRole, updateUserPackage, getPackages, createUser, verifyUserEmail, giftTokens, getUserTokenBalance, sendUserPasswordResetLink, approveUserAccount } from '@/lib/actions/admin'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,11 +44,19 @@ type User = {
   role: string
   packageId: string
   onboardingCompleted: boolean
+  accountApprovedAt: Date | null
+  lastLoginAt: Date | null
   createdAt: Date
   goals: unknown
   interests: unknown
   notificationPrefs: unknown
   package: Package
+  usage30d?: {
+    aiCalls: number
+    aiTokens: number
+    moduleEvents: number
+    lastActivityAt: Date | null
+  }
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -87,6 +99,19 @@ function formatDate(date: Date): string {
   })
 }
 
+function formatCompactNumber(value: number): string {
+  return new Intl.NumberFormat('tr-TR', {
+    notation: 'compact',
+    maximumFractionDigits: 1,
+  }).format(value)
+}
+
+function roleLabel(role: string): string {
+  if (role === 'admin') return 'Admin'
+  if (role === 'org_admin') return 'Org Admin'
+  return 'Kullanıcı'
+}
+
 function isWithinLastWeek(date: Date): boolean {
   const now = Date.now()
   const d = new Date(date).getTime()
@@ -114,12 +139,23 @@ function exportCSV(users: User[]) {
   URL.revokeObjectURL(url)
 }
 
+const QUICK_FILTER_OPTIONS: Array<{
+  key: QuickFilter
+  label: string
+  tone: string
+}> = [
+  { key: 'all', label: 'Tumu', tone: 'var(--color-primary)' },
+  { key: 'admins', label: 'Adminler', tone: 'var(--color-destructive)' },
+  { key: 'pending', label: 'Onboarding Bekleyen', tone: 'var(--color-warning)' },
+  { key: 'recent', label: 'Son 7 Gun', tone: 'var(--color-success)' },
+]
+
 // ─── Skeleton Row ─────────────────────────────────────────────────────────────
 
 function SkeletonRow() {
   return ( // NOSONAR
     <tr className="border-b border-[var(--color-border)] animate-pulse">
-      {[140, 200, 90, 70, 60, 110, 120].map((w, i) => (
+      {[140, 120, 90, 120, 90, 110, 120].map((w, i) => (
         <td key={i} className="px-5 py-4">
           <div
             className="h-4 rounded bg-[var(--color-surface-elevated)]"
@@ -144,6 +180,34 @@ function RoleChangeModal({
   onConfirm: (role: string) => void
   loading: boolean
 }) {
+  if (user.role === 'org_admin') {
+    return (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center p-4"
+        style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+        onClick={onClose}
+      >
+        <div
+          className="rounded-xl p-6 w-full max-w-md shadow-2xl"
+          style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2 className="text-base font-semibold mb-2" style={{ color: 'var(--color-text-primary)' }}>
+            Rol kilitli
+          </h2>
+          <p className="text-sm mb-5" style={{ color: 'var(--color-text-secondary)' }}>
+            Organizasyon yöneticisi rolleri bu ekrandan değiştirilmiyor. Önce organizasyon sahipliğini güvenli şekilde devretmek gerekiyor.
+          </p>
+          <div className="flex justify-end">
+            <Button size="sm" onClick={onClose}>
+              Tamam
+            </Button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   const targetRole = user.role === 'admin' ? 'user' : 'admin'
   const targetLabel = targetRole === 'admin' ? 'Admin' : 'Kullanıcı'
 
@@ -300,6 +364,166 @@ function PackageChangeModal({
             disabled={selectedId === user.packageId}
           >
             Paketi Güncelle
+          </Button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ─── Modal: Gift Tokens ───────────────────────────────────────────────────────
+
+const QUICK_AMOUNTS = [50_000, 100_000, 250_000, 500_000, 1_000_000]
+
+function formatTokens(n: bigint | number): string {
+  return Number(n).toLocaleString('tr-TR')
+}
+
+function GiftTokenModal({
+  user,
+  currentBalance,
+  loading,
+  onClose,
+  onConfirm,
+}: {
+  user: User
+  currentBalance: bigint | null
+  loading: boolean
+  onClose: () => void
+  onConfirm: (amount: number, description: string) => void
+}) {
+  const [amount, setAmount] = useState('')
+  const [description, setDescription] = useState('Admin token hediyesi')
+  const [validationError, setValidationError] = useState<string | null>(null)
+
+  const parsedAmount = parseInt(amount.replace(/\D/g, ''), 10)
+  const isValid = !isNaN(parsedAmount) && parsedAmount > 0 && description.trim().length > 0
+
+  const handleSubmit = () => {
+    if (!isValid) {
+      setValidationError('Geçerli bir miktar ve açıklama girin.')
+      return
+    }
+    setValidationError(null)
+    onConfirm(parsedAmount, description)
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+      onClick={onClose}
+    >
+      <div
+        className="rounded-xl p-6 w-full max-w-md shadow-2xl"
+        style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'rgba(245,158,11,0.12)' }}>
+            <Coins size={20} style={{ color: 'var(--color-warning)' }} />
+          </div>
+          <div>
+            <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+              Token Hediye Et
+            </h2>
+            <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {user.name ?? user.email}
+            </p>
+          </div>
+        </div>
+
+        {/* Mevcut bakiye */}
+        <div className="rounded-lg px-4 py-3 mb-5 flex items-center justify-between"
+          style={{ backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)' }}>
+          <span className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>Mevcut bakiye</span>
+          <span className="text-sm font-semibold" style={{ color: 'var(--color-warning)' }}>
+            {currentBalance === null
+              ? '...'
+              : `${formatTokens(currentBalance)} token`}
+          </span>
+        </div>
+
+        {/* Hızlı seçim */}
+        <p className="text-xs mb-2" style={{ color: 'var(--color-text-secondary)' }}>Hızlı seçim</p>
+        <div className="flex flex-wrap gap-2 mb-4">
+          {QUICK_AMOUNTS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => setAmount(String(q))}
+              className="rounded-md px-3 py-1.5 text-xs font-medium transition-colors"
+              style={{
+                backgroundColor: parsedAmount === q ? 'rgba(245,158,11,0.15)' : 'var(--color-surface)',
+                border: `1px solid ${parsedAmount === q ? 'var(--color-warning)' : 'var(--color-border)'}`,
+                color: parsedAmount === q ? 'var(--color-warning)' : 'var(--color-text-secondary)',
+              }}
+            >
+              {formatTokens(q)}
+            </button>
+          ))}
+        </div>
+
+        {/* Manuel giriş */}
+        <div className="space-y-3 mb-5">
+          <div>
+            <label className="block text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+              Token miktarı
+            </label>
+            <input
+              type="text"
+              inputMode="numeric"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value.replace(/\D/g, ''))}
+              placeholder="örn. 100000"
+              className="w-full rounded-md px-3 py-2 text-sm outline-none focus:ring-1"
+              style={{
+                backgroundColor: 'var(--color-background)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-primary)',
+              }}
+            />
+          </div>
+          <div>
+            <label className="block text-xs mb-1" style={{ color: 'var(--color-text-secondary)' }}>
+              Açıklama
+            </label>
+            <input
+              type="text"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              placeholder="Hediye nedeni"
+              maxLength={120}
+              className="w-full rounded-md px-3 py-2 text-sm outline-none focus:ring-1"
+              style={{
+                backgroundColor: 'var(--color-background)',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-primary)',
+              }}
+            />
+          </div>
+        </div>
+
+        {validationError && (
+          <div className="mb-4 flex items-center gap-2 text-xs" style={{ color: 'var(--color-destructive)' }}>
+            <AlertCircle size={13} />
+            {validationError}
+          </div>
+        )}
+
+        <div className="flex gap-3 justify-end">
+          <Button variant="ghost" size="sm" onClick={onClose} disabled={loading}>
+            Vazgeç
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            loading={loading}
+            onClick={handleSubmit}
+            disabled={!isValid}
+          >
+            <Coins size={14} />
+            {isValid ? `${formatTokens(parsedAmount)} Token Gönder` : 'Token Gönder'}
           </Button>
         </div>
       </div>
@@ -630,6 +854,7 @@ function DetailModal({ user, onClose }: { user: User; onClose: () => void }) {
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 const PAGE_SIZE = 20
+type QuickFilter = 'all' | 'admins' | 'pending' | 'recent'
 
 export default function UsersPage() {
   const [allUsers, setAllUsers] = useState<User[]>([])
@@ -641,14 +866,20 @@ export default function UsersPage() {
   const [search, setSearch] = useState('')
   const [packageFilter, setPackageFilter] = useState('all')
   const [roleFilter, setRoleFilter] = useState('all')
+  const [quickFilter, setQuickFilter] = useState<QuickFilter>('all')
   const [page, setPage] = useState(1)
 
   const [roleModal, setRoleModal] = useState<User | null>(null)
   const [packageModal, setPackageModal] = useState<User | null>(null)
   const [detailModal, setDetailModal] = useState<User | null>(null)
   const [deleteModal, setDeleteModal] = useState<User | null>(null)
+  const [verifyEmailModal, setVerifyEmailModal] = useState<User | null>(null)
+  const [passwordResetModal, setPasswordResetModal] = useState<User | null>(null)
+  const [giftTokenModal, setGiftTokenModal] = useState<User | null>(null)
+  const [giftTokenBalance, setGiftTokenBalance] = useState<bigint | null>(null)
   const [createUserModal, setCreateUserModal] = useState(false)
   const [mutating, setMutating] = useState(false)
+  const deferredSearch = useDeferredValue(search)
 
   const fetchData = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
@@ -670,20 +901,28 @@ export default function UsersPage() {
   useEffect(() => { fetchData() }, [fetchData])
 
   const filtered = useMemo(() => {
+    const searchLower = deferredSearch.trim().toLowerCase()
+
     return allUsers.filter((u) => {
-      const searchLower = search.toLowerCase()
       const matchSearch =
-        !search ||
+        !searchLower ||
         (u.name ?? '').toLowerCase().includes(searchLower) ||
         u.email.toLowerCase().includes(searchLower)
       const matchPackage =
         packageFilter === 'all' || u.package.name.toLowerCase() === packageFilter.toLowerCase()
       const matchRole = roleFilter === 'all' || u.role === roleFilter
-      return matchSearch && matchPackage && matchRole
-    })
-  }, [allUsers, search, packageFilter, roleFilter])
 
-  useEffect(() => { setPage(1) }, [search, packageFilter, roleFilter])
+      const matchQuickFilter =
+        quickFilter === 'all' ||
+        (quickFilter === 'admins' && u.role === 'admin') ||
+        (quickFilter === 'pending' && !u.onboardingCompleted) ||
+        (quickFilter === 'recent' && isWithinLastWeek(u.createdAt))
+
+      return matchSearch && matchPackage && matchRole && matchQuickFilter
+    })
+  }, [allUsers, deferredSearch, packageFilter, roleFilter, quickFilter])
+
+  useEffect(() => { setPage(1) }, [deferredSearch, packageFilter, roleFilter, quickFilter])
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE))
   const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
@@ -700,6 +939,19 @@ export default function UsersPage() {
     () => Array.from(new Set(allUsers.map((u) => u.package.name))),
     [allUsers]
   )
+
+  const hasActiveFilters =
+    search.trim().length > 0 ||
+    packageFilter !== 'all' ||
+    roleFilter !== 'all' ||
+    quickFilter !== 'all'
+
+  const clearFilters = useCallback(() => {
+    setSearch('')
+    setPackageFilter('all')
+    setRoleFilter('all')
+    setQuickFilter('all')
+  }, [])
 
   const handleRoleConfirm = async (role: string) => {
     if (!roleModal) return
@@ -731,6 +983,78 @@ export default function UsersPage() {
       setPackageModal(null)
     } catch (e) {
       console.error(e)
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleVerifyEmailConfirm = async (userId: string) => {
+    setMutating(true)
+    try {
+      await verifyUserEmail(userId)
+      setVerifyEmailModal(null)
+      await fetchData(true)
+    } catch (e) {
+      console.error(e)
+      setError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleApproveAccount = async (userId: string) => {
+    setMutating(true)
+    try {
+      await approveUserAccount(userId)
+      toast.success('Kullanıcı hesabı onaylandı')
+      await fetchData(true)
+    } catch (e) {
+      console.error(e)
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
+      toast.error(message)
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const handleSendPasswordResetLink = async (userId: string) => {
+    setMutating(true)
+    try {
+      const result = await sendUserPasswordResetLink(userId)
+      setPasswordResetModal(null)
+      toast.success(`Şifre sıfırlama bağlantısı gönderildi: ${result.email}`)
+    } catch (e) {
+      console.error(e)
+      const message = e instanceof Error ? e.message : String(e)
+      setError(message)
+      toast.error(message)
+    } finally {
+      setMutating(false)
+    }
+  }
+
+  const openGiftTokenModal = async (user: User) => {
+    setGiftTokenModal(user)
+    setGiftTokenBalance(null)
+    try {
+      const bal = await getUserTokenBalance(user.id)
+      setGiftTokenBalance(bal)
+    } catch {
+      setGiftTokenBalance(0n)
+    }
+  }
+
+  const handleGiftTokenConfirm = async (amount: number, description: string) => {
+    if (!giftTokenModal) return
+    setMutating(true)
+    try {
+      await giftTokens(giftTokenModal.id, amount, description)
+      setGiftTokenModal(null)
+      setGiftTokenBalance(null)
+    } catch (e) {
+      console.error(e)
+      setError(e instanceof Error ? e.message : String(e))
     } finally {
       setMutating(false)
     }
@@ -888,6 +1212,29 @@ export default function UsersPage() {
             />
           </div>
 
+          <div className="flex flex-wrap gap-2">
+            {QUICK_FILTER_OPTIONS.map((option) => {
+              const isActive = quickFilter === option.key
+              return (
+                <button
+                  key={option.key}
+                  type="button"
+                  onClick={() => setQuickFilter(option.key)}
+                  className="rounded-full px-3 py-1.5 text-xs font-medium transition-colors"
+                  style={{
+                    backgroundColor: isActive
+                      ? `color-mix(in srgb, ${option.tone} 14%, transparent)`
+                      : 'var(--color-surface)',
+                    border: `1px solid ${isActive ? option.tone : 'var(--color-border)'}`,
+                    color: isActive ? option.tone : 'var(--color-text-secondary)',
+                  }}
+                >
+                  {option.label}
+                </button>
+              )
+            })}
+          </div>
+
           <select
             value={packageFilter}
             onChange={(e) => setPackageFilter(e.target.value)}
@@ -943,6 +1290,49 @@ export default function UsersPage() {
             <Download size={15} />
             Dışa Aktar
           </Button>
+
+          {hasActiveFilters && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={clearFilters}
+            >
+              Filtreleri Temizle
+            </Button>
+          )}
+        </div>
+
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 rounded-xl px-4 py-3"
+          style={{
+            backgroundColor: 'var(--color-surface-elevated)',
+            border: '1px solid var(--color-border)',
+          }}
+        >
+          <div>
+            <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
+              {filtered.length.toLocaleString('tr-TR')} sonuc gosteriliyor
+            </p>
+            <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+              {hasActiveFilters
+                ? 'Arama ve filtreler uygulaniyor'
+                : 'Tum kullanicilar listeleniyor'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+            {deferredSearch !== search && (
+              <span
+                className="rounded-full px-2.5 py-1"
+                style={{
+                  backgroundColor: 'color-mix(in srgb, var(--color-primary) 10%, transparent)',
+                  color: 'var(--color-primary)',
+                }}
+              >
+                Arama guncelleniyor...
+              </span>
+            )}
+            <span>Sayfa basi {PAGE_SIZE} kayit</span>
+          </div>
         </div>
 
         {/* ── Error ── */}
@@ -972,13 +1362,19 @@ export default function UsersPage() {
           style={{
             backgroundColor: 'var(--color-surface-elevated)',
             border: '1px solid var(--color-border)',
+            contentVisibility: 'auto',
           }}
         >
           <div className="overflow-x-auto">
             <table className="w-full" style={{ borderCollapse: 'collapse' }}>
               <thead>
-                <tr style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  {['Kullanıcı', 'Paket', 'Rol', 'Onboarding', 'Kayıt Tarihi', 'İşlemler'].map(
+                <tr
+                  style={{
+                    borderBottom: '1px solid var(--color-border)',
+                    backgroundColor: 'var(--color-surface-elevated)',
+                  }}
+                >
+                  {['Kullanıcı', 'Paket', 'Rol', 'Kullanım (30g)', 'Son Aktivite', 'Kayıt Tarihi', 'İşlemler'].map(
                     (col) => (
                       <th
                         key={col}
@@ -997,7 +1393,7 @@ export default function UsersPage() {
                   : paginated.length === 0
                   ? (
                     <tr>
-                      <td colSpan={6} className="py-16 text-center">
+                      <td colSpan={7} className="py-16 text-center">
                         <div className="flex flex-col items-center gap-3">
                           <div
                             className="w-14 h-14 rounded-full flex items-center justify-center"
@@ -1006,22 +1402,18 @@ export default function UsersPage() {
                             <Users size={24} style={{ color: 'var(--color-text-secondary)' }} />
                           </div>
                           <p className="text-sm font-medium" style={{ color: 'var(--color-text-primary)' }}>
-                            {search || packageFilter !== 'all' || roleFilter !== 'all'
+                            {hasActiveFilters
                               ? 'Sonuç bulunamadı'
                               : 'Henüz kullanıcı yok'}
                           </p>
                           <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
-                            {search || packageFilter !== 'all' || roleFilter !== 'all'
+                            {hasActiveFilters
                               ? 'Arama kriterlerinizi değiştirmeyi deneyin'
                               : 'Kayıt olan kullanıcılar burada görünecek'}
                           </p>
-                          {(search || packageFilter !== 'all' || roleFilter !== 'all') && (
+                          {hasActiveFilters && (
                             <button
-                              onClick={() => {
-                                setSearch('')
-                                setPackageFilter('all')
-                                setRoleFilter('all')
-                              }}
+                              onClick={clearFilters}
                               className="text-xs px-3 py-1.5 rounded-md transition-colors"
                               style={{
                                 backgroundColor: 'var(--color-surface)',
@@ -1039,17 +1431,9 @@ export default function UsersPage() {
                   : paginated.map((user) => (
                     <tr
                       key={user.id}
-                      className="group transition-colors duration-100"
+                      className="group transition-colors duration-100 hover:bg-[var(--color-surface)]"
                       style={{
                         borderBottom: '1px solid var(--color-border)',
-                      }}
-                      onMouseEnter={(e) => {
-                        (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
-                          'var(--color-surface)'
-                      }}
-                      onMouseLeave={(e) => {
-                        (e.currentTarget as HTMLTableRowElement).style.backgroundColor =
-                          'transparent'
                       }}
                     >
                       {/* Kullanıcı */}
@@ -1087,24 +1471,47 @@ export default function UsersPage() {
 
                       {/* Rol */}
                       <td className="px-5 py-3.5">
-                        <Badge className={badgeVariants({ variant: user.role === 'admin' ? 'destructive' : 'secondary' })}>
-                          {user.role === 'admin' ? 'Admin' : 'Kullanıcı'}
+                        <Badge className={badgeVariants({ variant: user.role === 'admin' ? 'destructive' : user.role === 'org_admin' ? 'warning' : 'secondary' })}>
+                          {roleLabel(user.role)}
                         </Badge>
                       </td>
 
                       {/* Onboarding */}
                       <td className="px-5 py-3.5">
-                        {user.onboardingCompleted ? (
-                          <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--color-success)' }}>
-                            <Check size={14} />
-                            Tamamlandı
-                          </span>
-                        ) : (
-                          <span className="flex items-center gap-1 text-xs font-medium" style={{ color: 'var(--color-text-secondary)' }}>
-                            <X size={14} />
-                            Bekliyor
-                          </span>
-                        )}
+                        <div className="space-y-1">
+                          <p className="text-xs font-medium" style={{ color: 'var(--color-text-primary)' }}>
+                            {user.usage30d?.aiCalls ?? 0} AI cagrisi
+                          </p>
+                          <p className="text-[11px]" style={{ color: 'var(--color-text-secondary)' }}>
+                            {formatCompactNumber(user.usage30d?.aiTokens ?? 0)} token · {user.usage30d?.moduleEvents ?? 0} modül olayı
+                          </p>
+                          <div>
+                            {user.onboardingCompleted ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--color-success)' }}>
+                                <Check size={12} />
+                                onboarding tamam
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium" style={{ color: 'var(--color-warning)' }}>
+                                <X size={12} />
+                                onboarding bekliyor
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+
+                      {/* Son Aktivite */}
+                      <td
+                        className="px-5 py-3.5 text-sm whitespace-nowrap"
+                        style={{ color: 'var(--color-text-secondary)' }}
+                      >
+                        <div className="space-y-1">
+                          <p>{formatDate(user.usage30d?.lastActivityAt ?? user.lastLoginAt ?? user.createdAt)}</p>
+                          <p className="text-[11px]">
+                            {user.accountApprovedAt ? 'hesap onayli' : 'hesap onayi bekliyor'}
+                          </p>
+                        </div>
                       </td>
 
                       {/* Kayıt Tarihi */}
@@ -1119,7 +1526,13 @@ export default function UsersPage() {
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-1.5">
                           <button
-                            onClick={() => setRoleModal(user)}
+                            onClick={() => {
+                              if (user.role === 'org_admin') {
+                                setError('Org Admin rolleri bu ekrandan değiştirilemez.')
+                                return
+                              }
+                              setRoleModal(user)
+                            }}
                             className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
                             style={{
                               backgroundColor: 'var(--color-surface)',
@@ -1160,8 +1573,8 @@ export default function UsersPage() {
                             <PackageOpen size={13} />
                             <span className="hidden sm:inline">Paket</span>
                           </button>
-                          <button
-                            onClick={() => setDetailModal(user)}
+                          <Link
+                            href={`/admin/users/${user.id}`}
                             className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
                             style={{
                               backgroundColor: 'var(--color-surface)',
@@ -1179,7 +1592,93 @@ export default function UsersPage() {
                             title="Detay"
                           >
                             <Eye size={13} />
-                            <span className="hidden sm:inline">Detay</span>
+                            <span className="hidden sm:inline">Analiz</span>
+                          </Link>
+                          {!user.accountApprovedAt ? (
+                            <button
+                              onClick={() => handleApproveAccount(user.id)}
+                              className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                              style={{
+                                backgroundColor: 'var(--color-surface)',
+                                border: '1px solid var(--color-border)',
+                                color: 'var(--color-text-secondary)',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.color = 'var(--color-success)'
+                                e.currentTarget.style.borderColor = 'var(--color-success)'
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.color = 'var(--color-text-secondary)'
+                                e.currentTarget.style.borderColor = 'var(--color-border)'
+                              }}
+                              title="Hesabı Onayla"
+                            >
+                              <Check size={13} />
+                              <span className="hidden sm:inline">Onay</span>
+                            </button>
+                          ) : null}
+                          <button
+                            onClick={() => setVerifyEmailModal(user)}
+                            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                            style={{
+                              backgroundColor: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              color: 'var(--color-text-secondary)',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-primary)'
+                              e.currentTarget.style.borderColor = 'var(--color-success)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-secondary)'
+                              e.currentTarget.style.borderColor = 'var(--color-border)'
+                            }}
+                            title="E-posta Onayla"
+                          >
+                            <MailCheck size={13} />
+                            <span className="hidden sm:inline">Onayla</span>
+                          </button>
+                          <button
+                            onClick={() => setPasswordResetModal(user)}
+                            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                            style={{
+                              backgroundColor: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              color: 'var(--color-text-secondary)',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-primary)'
+                              e.currentTarget.style.borderColor = 'var(--color-warning)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-secondary)'
+                              e.currentTarget.style.borderColor = 'var(--color-border)'
+                            }}
+                            title="Şifre Sıfırlama Linki Gönder"
+                          >
+                            <KeyRound size={13} />
+                            <span className="hidden sm:inline">Şifre</span>
+                          </button>
+                          <button
+                            onClick={() => openGiftTokenModal(user)}
+                            className="flex items-center gap-1 rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors"
+                            style={{
+                              backgroundColor: 'var(--color-surface)',
+                              border: '1px solid var(--color-border)',
+                              color: 'var(--color-text-secondary)',
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.color = 'var(--color-warning)'
+                              e.currentTarget.style.borderColor = 'var(--color-warning)'
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.color = 'var(--color-text-secondary)'
+                              e.currentTarget.style.borderColor = 'var(--color-border)'
+                            }}
+                            title="Token Hediye Et"
+                          >
+                            <Coins size={13} />
+                            <span className="hidden sm:inline">Token</span>
                           </button>
                           <button
                             onClick={() => setDeleteModal(user)}
@@ -1297,6 +1796,106 @@ export default function UsersPage() {
       )}
       {detailModal && (
         <DetailModal user={detailModal} onClose={() => setDetailModal(null)} />
+      )}
+      {verifyEmailModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setVerifyEmailModal(null)}
+        >
+          <div
+            className="rounded-xl p-6 w-full max-w-md shadow-2xl"
+            style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-background)' }}>
+                <MailCheck size={20} style={{ color: 'var(--color-success)' }} />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  E-posta Adresini Onayla
+                </h2>
+                <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  Kullanıcının e-postası doğrulanmış olarak işaretlenecek
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg p-4 mb-5" style={{ backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)' }}>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{verifyEmailModal.name ?? verifyEmailModal.email}</span> kullanıcısının e-posta adresi ({verifyEmailModal.email}) onaylanacak. Kullanıcı e-posta doğrulaması yapmadan giriş yapabilecek.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setVerifyEmailModal(null)} disabled={mutating}>
+                Vazgeç
+              </Button>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={mutating}
+                onClick={() => handleVerifyEmailConfirm(verifyEmailModal.id)}
+              >
+                <MailCheck size={14} />
+                E-postayı Onayla
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {passwordResetModal && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          style={{ backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+          onClick={() => setPasswordResetModal(null)}
+        >
+          <div
+            className="rounded-xl p-6 w-full max-w-md shadow-2xl"
+            style={{ backgroundColor: 'var(--color-surface-elevated)', border: '1px solid var(--color-border)' }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ backgroundColor: 'var(--color-background)' }}>
+                <KeyRound size={20} style={{ color: 'var(--color-warning)' }} />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold" style={{ color: 'var(--color-text-primary)' }}>
+                  Şifre Sıfırlama Linki Gönder
+                </h2>
+                <p className="text-xs" style={{ color: 'var(--color-text-secondary)' }}>
+                  Kullanıcıya güvenli sıfırlama e-postası gönderilecek
+                </p>
+              </div>
+            </div>
+            <div className="rounded-lg p-4 mb-5" style={{ backgroundColor: 'var(--color-background)', border: '1px solid var(--color-border)' }}>
+              <p className="text-sm" style={{ color: 'var(--color-text-secondary)' }}>
+                <span className="font-medium" style={{ color: 'var(--color-text-primary)' }}>{passwordResetModal.name ?? passwordResetModal.email}</span> kullanıcısına ({passwordResetModal.email}) şifre sıfırlama bağlantısı gönderilecek.
+              </p>
+            </div>
+            <div className="flex gap-3 justify-end">
+              <Button variant="ghost" size="sm" onClick={() => setPasswordResetModal(null)} disabled={mutating}>
+                Vazgeç
+              </Button>
+              <Button
+                size="sm"
+                loading={mutating}
+                onClick={() => handleSendPasswordResetLink(passwordResetModal.id)}
+              >
+                <KeyRound size={14} />
+                Link Gönder
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {giftTokenModal && (
+        <GiftTokenModal
+          user={giftTokenModal}
+          currentBalance={giftTokenBalance}
+          loading={mutating}
+          onClose={() => { setGiftTokenModal(null); setGiftTokenBalance(null) }}
+          onConfirm={handleGiftTokenConfirm}
+        />
       )}
       {deleteModal && (
         <div

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-type GuardKey = "materials" | "addons" | "support";
+type GuardKey = "materials" | "addons" | "support" | "usage";
 
 const guardState = globalThis as typeof globalThis & {
   __medasiSchemaGuardPromises__?: Partial<Record<GuardKey, Promise<void>>>;
@@ -187,10 +187,21 @@ export async function ensureSupportSchema(): Promise<void> {
         status text NOT NULL DEFAULT 'open',
         priority text NOT NULL DEFAULT 'normal',
         admin_notes text,
+        assigned_admin_user_id text REFERENCES public.users(id) ON DELETE SET NULL,
+        first_response_at timestamptz,
+        last_response_at timestamptz,
         resolved_at timestamptz,
+        closed_at timestamptz,
+        close_reason text,
         created_at timestamptz NOT NULL DEFAULT now(),
         updated_at timestamptz NOT NULL DEFAULT now()
       )`,
+      `ALTER TABLE public.support_tickets
+        ADD COLUMN IF NOT EXISTS assigned_admin_user_id text REFERENCES public.users(id) ON DELETE SET NULL,
+        ADD COLUMN IF NOT EXISTS first_response_at timestamptz,
+        ADD COLUMN IF NOT EXISTS last_response_at timestamptz,
+        ADD COLUMN IF NOT EXISTS closed_at timestamptz,
+        ADD COLUMN IF NOT EXISTS close_reason text`,
       `CREATE TABLE IF NOT EXISTS public.support_ticket_messages (
         id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
         ticket_id text NOT NULL REFERENCES public.support_tickets(id) ON DELETE CASCADE,
@@ -199,14 +210,68 @@ export async function ensureSupportSchema(): Promise<void> {
         is_admin boolean NOT NULL DEFAULT false,
         created_at timestamptz NOT NULL DEFAULT now()
       )`,
+      `CREATE TABLE IF NOT EXISTS public.support_ticket_notes (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        ticket_id text NOT NULL REFERENCES public.support_tickets(id) ON DELETE CASCADE,
+        author_user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        body text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE TABLE IF NOT EXISTS public.support_ticket_audits (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        ticket_id text NOT NULL REFERENCES public.support_tickets(id) ON DELETE CASCADE,
+        actor_user_id text REFERENCES public.users(id) ON DELETE SET NULL,
+        action text NOT NULL,
+        from_status text,
+        to_status text,
+        details text,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`,
       `CREATE INDEX IF NOT EXISTS support_tickets_user_id_created_at_idx
         ON public.support_tickets(user_id, created_at)`,
       `CREATE INDEX IF NOT EXISTS support_tickets_status_priority_idx
         ON public.support_tickets(status, priority)`,
+      `CREATE INDEX IF NOT EXISTS support_tickets_assigned_admin_status_updated_idx
+        ON public.support_tickets(assigned_admin_user_id, status, updated_at DESC)`,
       `CREATE INDEX IF NOT EXISTS support_ticket_messages_ticket_id_created_at_idx
         ON public.support_ticket_messages(ticket_id, created_at)`,
       `CREATE INDEX IF NOT EXISTS support_ticket_messages_author_user_id_created_at_idx
         ON public.support_ticket_messages(author_user_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS support_ticket_notes_ticket_id_created_at_idx
+        ON public.support_ticket_notes(ticket_id, created_at)`,
+      `CREATE INDEX IF NOT EXISTS support_ticket_audits_ticket_id_created_at_idx
+        ON public.support_ticket_audits(ticket_id, created_at)`,
+    ]);
+  });
+}
+
+export async function ensureUsageTrackingSchema(): Promise<void> {
+  return oncePerProcess("usage", async () => {
+    await runRawStatements([
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `ALTER TABLE public.users
+        ADD COLUMN IF NOT EXISTS account_approved_at timestamptz,
+        ADD COLUMN IF NOT EXISTS failed_login_attempts int NOT NULL DEFAULT 0,
+        ADD COLUMN IF NOT EXISTS locked_until timestamptz,
+        ADD COLUMN IF NOT EXISTS last_login_at timestamptz`,
+      `UPDATE public.users
+        SET account_approved_at = COALESCE(account_approved_at, created_at)
+        WHERE account_approved_at IS NULL`,
+      `CREATE TABLE IF NOT EXISTS public.module_activities (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        module text NOT NULL,
+        action text NOT NULL,
+        path text NOT NULL,
+        metadata jsonb,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS module_activities_user_created_at_idx
+        ON public.module_activities(user_id, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS module_activities_module_created_at_idx
+        ON public.module_activities(module, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS module_activities_action_created_at_idx
+        ON public.module_activities(action, created_at DESC)`,
     ]);
   });
 }

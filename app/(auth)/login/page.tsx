@@ -47,9 +47,14 @@ function LoginPageContent() {
     [],
   );
   const resetSuccess = searchParams.get("reset") === "success";
+  const emailVerified = searchParams.get("verified") === "true";
+  const registrationSuccess = searchParams.get("registered") === "true";
+  const approvalPending = searchParams.get("approval") === "pending";
   const routeNotice =
     searchParams.get("reason") === "admin_login_disabled"
       ? "Yönetici girişi şu anda kapalı."
+      : searchParams.get("reason") === "session_timeout"
+        ? "Oturum süren dolduğu için güvenli çıkış yapıldı."
       : null;
 
   const handleSubmit = async (formData: FormData) => {
@@ -123,6 +128,20 @@ function LoginPageContent() {
         </div>
       )}
 
+      {emailVerified && (
+        <div
+          className="mb-5 flex items-start gap-3 border px-3 py-3 text-sm"
+          style={{
+            borderColor: "rgba(52,199,89,0.35)",
+            backgroundColor: "rgba(52,199,89,0.08)",
+            color: "rgba(162,255,182,1)",
+          }}
+        >
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+          <span>E-posta adresin doğrulandı. Giriş yapabilirsin.</span>
+        </div>
+      )}
+
       {resetSuccess && (
         <div
           className="mb-5 flex items-start gap-3 border px-3 py-3 text-sm"
@@ -134,6 +153,24 @@ function LoginPageContent() {
         >
           <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
           <span>Şifren güncellendi. Yeni şifrenle giriş yapabilirsin.</span>
+        </div>
+      )}
+
+      {registrationSuccess && (
+        <div
+          className="mb-5 flex items-start gap-3 border px-3 py-3 text-sm"
+          style={{
+            borderColor: "rgba(52,199,89,0.35)",
+            backgroundColor: "rgba(52,199,89,0.08)",
+            color: "rgba(162,255,182,1)",
+          }}
+        >
+          <CheckCircle2 size={16} className="mt-0.5 shrink-0" />
+          <span>
+            {approvalPending
+              ? "Kaydın alındı. Yönetici onayı sonrası giriş yapabileceksin."
+              : "Kaydın tamamlandı. Giriş yapabilirsin."}
+          </span>
         </div>
       )}
 

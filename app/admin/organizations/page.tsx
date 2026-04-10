@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { Badge } from "@/components/ui/Badge";
+import { getCurrencySettings, formatUsd } from "@/lib/currency";
 import {
   FlaskConical,
   Plus,
@@ -30,14 +31,17 @@ function daysLeft(expiresAt: Date) {
 }
 
 export default async function OrganizationsPage() {
-  const orgs = await prisma.researchOrganization.findMany({
-    orderBy: { createdAt: "desc" },
-    include: {
-      adminUser: true,
-      members: { where: { isActive: true } },
-      _count: { select: { aiUsage: true } },
-    },
-  });
+  const [orgs, currency] = await Promise.all([
+    prisma.researchOrganization.findMany({
+      orderBy: { createdAt: "desc" },
+      include: {
+        adminUser: true,
+        members: { where: { isActive: true } },
+        _count: { select: { aiUsage: true } },
+      },
+    }),
+    getCurrencySettings(),
+  ]);
 
   // Her org için bu ayki toplam maliyet
   const monthStart = new Date();
@@ -140,13 +144,13 @@ export default async function OrganizationsPage() {
             className="text-3xl font-bold"
             style={{ color: "var(--color-text-primary)" }}
           >
-            ${totalCost.toFixed(2)}
+            {currency.formatTryFromUsd(totalCost)}
           </p>
           <p
             className="text-xs mt-1"
             style={{ color: "var(--color-text-secondary)" }}
           >
-            Gerçek API maliyeti
+            {formatUsd(totalCost)}
           </p>
         </div>
 
@@ -170,10 +174,10 @@ export default async function OrganizationsPage() {
             className="text-3xl font-bold"
             style={{ color: "var(--color-text-primary)" }}
           >
-            ${totalRevenue.toFixed(2)}
+            {currency.formatTryFromUsd(totalRevenue)}
           </p>
           <p className="text-xs mt-1" style={{ color: "var(--color-success)" }}>
-            +${(totalRevenue - totalCost).toFixed(2)} kâr
+            +{currency.formatTryFromUsd(totalRevenue - totalCost)} kâr
           </p>
         </div>
       </div>
@@ -293,13 +297,13 @@ export default async function OrganizationsPage() {
                               : "var(--color-text-secondary)",
                         }}
                       >
-                        ${cost.toFixed(3)}
+                        {currency.formatTryFromUsd(cost)}
                       </td>
                       <td
                         className="px-5 py-3 text-sm font-mono"
                         style={{ color: "var(--color-success)" }}
                       >
-                        ${revenue.toFixed(2)}
+                        {currency.formatTryFromUsd(revenue)}
                       </td>
                       <td className="px-5 py-3">
                         <div

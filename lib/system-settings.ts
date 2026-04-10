@@ -31,6 +31,7 @@ export interface SystemSettings {
   debugMode: boolean;
   allowedEmailDomains: string;
   maintenanceMessage: string;
+  usdTryRate: number;
   appVersion: string;
 }
 
@@ -82,6 +83,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   allowedEmailDomains: "",
   maintenanceMessage:
     "Sistemimiz şu anda bakım modundadır. Lütfen daha sonra tekrar deneyiniz.",
+  usdTryRate: 39,
   appVersion: "1.0.0",
 };
 
@@ -117,6 +119,7 @@ export const SYSTEM_SETTING_KEYS: readonly SystemSettingKey[] = [
   "debugMode",
   "allowedEmailDomains",
   "maintenanceMessage",
+  "usdTryRate",
   "appVersion",
 ];
 
@@ -406,6 +409,13 @@ export function sanitizeSystemSettingValue(
       return parseText(value, SYSTEM_SETTINGS_DEFAULTS.allowedEmailDomains);
     case "maintenanceMessage":
       return parseText(value, SYSTEM_SETTINGS_DEFAULTS.maintenanceMessage);
+    case "usdTryRate":
+      return String(
+        parseFloatValue(value, SYSTEM_SETTINGS_DEFAULTS.usdTryRate, {
+          min: 0.1,
+          max: 1000,
+        }),
+      );
     case "appVersion":
       return parseText(value, SYSTEM_SETTINGS_DEFAULTS.appVersion);
     default:
@@ -547,6 +557,11 @@ export async function getSystemSettingsFromDb(): Promise<SystemSettings> {
       map.maintenanceMessage,
       SYSTEM_SETTINGS_DEFAULTS.maintenanceMessage,
     ),
+    usdTryRate: parseFloatValue(
+      map.usdTryRate,
+      SYSTEM_SETTINGS_DEFAULTS.usdTryRate,
+      { min: 0.1, max: 1000 },
+    ),
     appVersion: parseText(map.appVersion, SYSTEM_SETTINGS_DEFAULTS.appVersion),
   };
 }
@@ -571,9 +586,13 @@ export async function getPublicSystemConfigFromDb() {
   return {
     maintenanceMode: settings.maintenanceMode,
     registrationEnabled: settings.registrationEnabled,
+    emailVerificationRequired: settings.emailVerificationRequired,
     aiEnabled: settings.aiEnabled,
     maintenanceMessage: settings.maintenanceMessage,
     allowedEmailDomains: settings.allowedEmailDomains,
+    sessionTimeoutMinutes: settings.sessionTimeoutMinutes,
+    requireProfileCompletion: settings.requireProfileCompletion,
+    usdTryRate: settings.usdTryRate,
     moduleToggles,
     announcements: announcements.filter((item) => item.active),
   };

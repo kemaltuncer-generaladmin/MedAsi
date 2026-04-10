@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
+import { useEffect, useState, useTransition } from "react";
 import { createOrganization } from "@/lib/actions/organizations";
+import { convertTryToUsd, formatTry } from "@/lib/currency";
 import {
   ArrowLeft,
   FlaskConical,
@@ -30,9 +30,9 @@ const AVAILABLE_MODULES = [
 ];
 
 export default function NewOrganizationPage() {
-  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [usdTryRate, setUsdTryRate] = useState(39);
 
   const [form, setForm] = useState({
     name: "",
@@ -43,11 +43,34 @@ export default function NewOrganizationPage() {
     startsAt: new Date().toISOString().slice(0, 10),
     expiresAt: "",
     markupPct: 30,
-    monthlyBudgetUsd: "",
+    monthlyBudgetTry: "",
     alertThresholdPct: 80,
     notes: "",
     moduleIds: [] as string[],
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadPublicSettings() {
+      try {
+        const response = await fetch("/api/system/public", { cache: "no-store" });
+        if (!response.ok) return;
+
+        const data = (await response.json()) as { usdTryRate?: number };
+        if (!cancelled && typeof data.usdTryRate === "number" && data.usdTryRate > 0) {
+          setUsdTryRate(data.usdTryRate);
+        }
+      } catch {
+        // Varsayılan kurla devam etmek yeterli.
+      }
+    }
+
+    void loadPublicSettings();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function handleChange(
     e: React.ChangeEvent<
@@ -101,8 +124,8 @@ export default function NewOrganizationPage() {
           startsAt: form.startsAt,
           expiresAt: form.expiresAt,
           markupPct: Number(form.markupPct),
-          monthlyBudgetUsd: form.monthlyBudgetUsd
-            ? Number(form.monthlyBudgetUsd)
+          monthlyBudgetUsd: form.monthlyBudgetTry
+            ? convertTryToUsd(Number(form.monthlyBudgetTry), usdTryRate)
             : undefined,
           alertThresholdPct: Number(form.alertThresholdPct),
           moduleIds: form.moduleIds,
@@ -363,13 +386,13 @@ export default function NewOrganizationPage() {
                 className={labelCls}
                 style={{ color: "var(--color-text-secondary)" }}
               >
-                Aylık Bütçe Tavanı (USD)
+                Aylık Bütçe Tavanı (TRY)
               </label>
               <input
-                name="monthlyBudgetUsd"
+                name="monthlyBudgetTry"
                 type="number"
                 min={0}
-                value={form.monthlyBudgetUsd}
+                value={form.monthlyBudgetTry}
                 onChange={handleChange}
                 placeholder="Opsiyonel"
                 className={inputCls}
@@ -379,7 +402,7 @@ export default function NewOrganizationPage() {
                 className="text-xs mt-1"
                 style={{ color: "var(--color-text-secondary)" }}
               >
-                Dolunca AI erişimi bloke olur
+                {`Sistemde USD olarak saklanır. Güncel kur: 1 USD = ${formatTry(usdTryRate, 2)}`}
               </p>
             </div>
             <div>

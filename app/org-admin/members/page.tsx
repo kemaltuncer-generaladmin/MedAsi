@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { Badge } from "@/components/ui/Badge";
+import { getCurrencySettings } from "@/lib/currency";
 import {
   inviteResearcher,
   deactivateOrgMember,
@@ -27,6 +28,7 @@ function fmtDate(d: Date) {
 }
 
 export default async function OrgMembersPage() {
+  const currency = await getCurrencySettings();
   const supabase = await createClient();
   const {
     data: { user },
@@ -309,7 +311,9 @@ export default async function OrgMembersPage() {
                             : "var(--color-text-secondary)",
                       }}
                     >
-                      {monthCost > 0 ? `$${monthCost.toFixed(4)}` : "—"}
+                      {monthCost > 0
+                        ? `${currency.formatTryFromUsd(monthCost)}`
+                        : "—"}
                     </td>
                     <td
                       className="px-5 py-3 text-xs"

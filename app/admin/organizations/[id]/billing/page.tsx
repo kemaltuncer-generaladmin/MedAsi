@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { formatUsd, getCurrencySettings } from "@/lib/currency";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { ArrowLeft, DollarSign, TrendingUp, Brain, Users } from "lucide-react";
@@ -23,6 +24,7 @@ export default async function OrgBillingPage({
 }: {
   params: { id: string };
 }) {
+  const currency = await getCurrencySettings();
   const org = await prisma.researchOrganization.findUnique({
     where: { id: params.id },
     include: { adminUser: true },
@@ -139,22 +141,22 @@ export default async function OrgBillingPage({
         {[
           {
             title: "Toplam Maliyet",
-            value: `$${fmt(totalCostUsd, 4)}`,
-            sub: "Gerçek API maliyeti",
+            value: currency.formatTryFromUsd(totalCostUsd, 2),
+            sub: `Ham maliyet: ${formatUsd(totalCostUsd, 4)}`,
             icon: DollarSign,
             color: "var(--color-warning)",
           },
           {
             title: "Toplam Gelir",
-            value: `$${fmt(totalRevenueUsd)}`,
-            sub: `Müşteriye fatura edilecek`,
+            value: currency.formatTryFromUsd(totalRevenueUsd),
+            sub: `Ham gelir: ${formatUsd(totalRevenueUsd)}`,
             icon: TrendingUp,
             color: "var(--color-success)",
           },
           {
             title: "Net Kâr",
-            value: `$${fmt(totalProfitUsd)}`,
-            sub: `%${org.markupPct} marj`,
+            value: currency.formatTryFromUsd(totalProfitUsd),
+            sub: `%${org.markupPct} marj · ${formatUsd(totalProfitUsd)}`,
             icon: TrendingUp,
             color: "var(--color-primary)",
           },
@@ -225,9 +227,9 @@ export default async function OrgBillingPage({
                 {[
                   "Dönem",
                   "Sorgu Sayısı",
-                  "Maliyet (USD)",
-                  "Gelir (USD)",
-                  "Kâr (USD)",
+                  "Maliyet (TRY)",
+                  "Gelir (TRY)",
+                  "Kâr (TRY)",
                 ].map((h) => (
                   <th
                     key={h}
@@ -263,19 +265,28 @@ export default async function OrgBillingPage({
                       className="px-5 py-3 text-sm font-mono"
                       style={{ color: "var(--color-warning)" }}
                     >
-                      ${fmt(data.costUsd, 4)}
+                      <div>{currency.formatTryFromUsd(data.costUsd, 2)}</div>
+                      <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                        {formatUsd(data.costUsd, 4)}
+                      </div>
                     </td>
                     <td
                       className="px-5 py-3 text-sm font-mono"
                       style={{ color: "var(--color-success)" }}
                     >
-                      ${fmt(rev)}
+                      <div>{currency.formatTryFromUsd(rev)}</div>
+                      <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                        {formatUsd(rev)}
+                      </div>
                     </td>
                     <td
                       className="px-5 py-3 text-sm font-mono"
                       style={{ color: "var(--color-primary)" }}
                     >
-                      ${fmt(rev - data.costUsd)}
+                      <div>{currency.formatTryFromUsd(rev - data.costUsd)}</div>
+                      <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                        {formatUsd(rev - data.costUsd)}
+                      </div>
                     </td>
                   </tr>
                 );
@@ -309,7 +320,7 @@ export default async function OrgBillingPage({
           <table className="w-full border-collapse">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                {["Araştırmacı", "Sorgu", "Maliyet", "Gelir (marjlı)"].map(
+                {["Araştırmacı", "Sorgu", "Maliyet (TRY)", "Gelir (TRY)"].map(
                   (h) => (
                     <th
                       key={h}
@@ -356,13 +367,19 @@ export default async function OrgBillingPage({
                         className="px-5 py-3 text-sm font-mono"
                         style={{ color: "var(--color-warning)" }}
                       >
-                        ${fmt(u.costUsd, 5)}
+                        <div>{currency.formatTryFromUsd(u.costUsd, 2)}</div>
+                        <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                          {formatUsd(u.costUsd, 5)}
+                        </div>
                       </td>
                       <td
                         className="px-5 py-3 text-sm font-mono"
                         style={{ color: "var(--color-success)" }}
                       >
-                        ${fmt(rev)}
+                        <div>{currency.formatTryFromUsd(rev)}</div>
+                        <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                          {formatUsd(rev)}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -396,7 +413,7 @@ export default async function OrgBillingPage({
           <table className="w-full border-collapse">
             <thead>
               <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                {["Model", "Sorgu", "Giriş Tok.", "Çıkış Tok.", "Maliyet"].map(
+                {["Model", "Sorgu", "Giriş Tok.", "Çıkış Tok.", "Maliyet (TRY)"].map(
                   (h) => (
                     <th
                       key={h}
@@ -445,7 +462,10 @@ export default async function OrgBillingPage({
                       className="px-5 py-3 text-sm font-mono"
                       style={{ color: "var(--color-warning)" }}
                     >
-                      ${fmt(data.costUsd, 5)}
+                      <div>{currency.formatTryFromUsd(data.costUsd, 2)}</div>
+                      <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                        {formatUsd(data.costUsd, 5)}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -483,8 +503,8 @@ export default async function OrgBillingPage({
                   "Modül",
                   "Giriş",
                   "Çıkış",
-                  "Maliyet",
-                  "Gelir",
+                  "Maliyet (TRY)",
+                  "Gelir (TRY)",
                   "Tarih",
                 ].map((h) => (
                   <th
@@ -539,13 +559,19 @@ export default async function OrgBillingPage({
                       className="px-4 py-2 text-xs font-mono"
                       style={{ color: "var(--color-warning)" }}
                     >
-                      ${fmt(u.costUsd, 5)}
+                      <div>{currency.formatTryFromUsd(u.costUsd, 2)}</div>
+                      <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                        {formatUsd(u.costUsd, 5)}
+                      </div>
                     </td>
                     <td
                       className="px-4 py-2 text-xs font-mono"
                       style={{ color: "var(--color-success)" }}
                     >
-                      ${fmt(rev)}
+                      <div>{currency.formatTryFromUsd(rev)}</div>
+                      <div className="text-[11px]" style={{ color: "var(--color-text-secondary)" }}>
+                        {formatUsd(rev)}
+                      </div>
                     </td>
                     <td
                       className="px-4 py-2 text-xs"

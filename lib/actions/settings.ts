@@ -19,12 +19,29 @@ import { getCurrentUserWithRole } from "@/lib/auth/current-user-role";
 
 export type { SystemSettings } from "@/lib/system-settings";
 
+const SETTINGS_REVALIDATION_PATHS = [
+  "/",
+  "/pricing",
+  "/maintenance",
+  "/dashboard",
+  "/account/profile",
+  "/admin",
+  "/admin/settings",
+  "/org-admin",
+] as const;
+
 async function checkAdmin() {
   const { user, role } = await getCurrentUserWithRole();
   if (!user || role !== "admin") {
     throw new Error("Unauthorized");
   }
   return user;
+}
+
+function revalidateSettingsSurface() {
+  for (const path of SETTINGS_REVALIDATION_PATHS) {
+    revalidatePath(path);
+  }
 }
 
 interface SanitizedSystemSettingsUpdateEntry {
@@ -87,7 +104,7 @@ export async function updateSystemSetting(
     details: `Yeni değer: ${normalizedValue}`,
     userId: user.id,
   });
-  revalidatePath("/admin/settings");
+  revalidateSettingsSurface();
 }
 
 export async function updateSystemSettings(
@@ -109,7 +126,7 @@ export async function updateSystemSettings(
           : "Geçerli alan bulunamadı",
       userId: user.id,
     });
-    revalidatePath("/admin/settings");
+    revalidateSettingsSurface();
     return;
   }
 
@@ -128,7 +145,7 @@ export async function updateSystemSettings(
       .join(" | "),
     userId: user.id,
   });
-  revalidatePath("/admin/settings");
+  revalidateSettingsSurface();
 }
 
 export async function getModuleToggles(): Promise<AdminModuleToggle> {
@@ -150,8 +167,7 @@ export async function updateModuleToggles(
     }`,
     userId: user.id,
   });
-  revalidatePath("/admin/modules");
-  revalidatePath("/dashboard");
+  revalidateSettingsSurface();
 }
 
 export async function getAnnouncements(): Promise<AdminAnnouncement[]> {
@@ -171,12 +187,21 @@ export async function saveAnnouncements(
     details: `Toplam duyuru: ${announcements.length}`,
     userId: user.id,
   });
-  revalidatePath("/admin/announcements");
+  revalidateSettingsSurface();
 }
 
 export async function getAdminLogs(params?: {
   level?: "info" | "warn" | "error" | "success" | "all";
-  category?: "auth" | "user" | "ai" | "system" | "payment" | "all";
+  category?:
+    | "auth"
+    | "user"
+    | "ai"
+    | "system"
+    | "payment"
+    | "billing"
+    | "admin"
+    | "materials"
+    | "all";
   dateRange?: "today" | "7d" | "30d" | "all";
   search?: string;
   take?: number;
@@ -187,7 +212,15 @@ export async function getAdminLogs(params?: {
     id: row.id,
     timestamp: row.createdAt.toISOString(),
     level: row.level as "info" | "warn" | "error" | "success",
-    category: row.category as "auth" | "user" | "ai" | "system" | "payment",
+    category: row.category as
+      | "auth"
+      | "user"
+      | "ai"
+      | "system"
+      | "payment"
+      | "billing"
+      | "admin"
+      | "materials",
     message: row.message,
     details: row.details ?? undefined,
     userId: row.userId ?? undefined,
@@ -241,6 +274,7 @@ export async function updateRawSetting(
     details: `Yeni değer: ${value}`,
     userId: user.id,
   });
+  revalidateSettingsSurface();
 }
 
 export async function getRawSettings(

@@ -9,12 +9,9 @@ import {
   Users,
 } from "lucide-react";
 import { getAdminAiCostEvents, getAdminModelPricingRows } from "@/lib/ai/admin-costs";
+import { getCurrencySettings, formatUsd } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
-
-function formatUsd(value: number, digits = 4) {
-  return `$${value.toFixed(digits)}`;
-}
 
 function formatInt(value: number) {
   return value.toLocaleString("tr-TR");
@@ -38,10 +35,13 @@ function startOfDaysAgo(days: number) {
 }
 
 export default async function AdminAiCostsPage() {
-  const [events, pricingRows] = await Promise.all([
+  const [events, pricingRows, currency] = await Promise.all([
     getAdminAiCostEvents(),
     getAdminModelPricingRows(),
+    getCurrencySettings(),
   ]);
+  const formatCost = (value: number, digits = 2) =>
+    currency.formatTryFromUsd(value, digits);
 
   const monthStart = startOfMonth();
   const weekStart = startOfDaysAgo(7);
@@ -100,6 +100,23 @@ export default async function AdminAiCostsPage() {
     }, new Map<string, { module: string; calls: number; totalTokens: number; costUsd: number }>()),
   ).sort((a, b) => b[1].costUsd - a[1].costUsd).map(([, value]) => value);
 
+  const byKey = Array.from(
+    events.reduce((map, event) => {
+      const key = event.keyName ?? "legacy/global";
+      const current = map.get(key) ?? {
+        keyName: key,
+        calls: 0,
+        totalTokens: 0,
+        costUsd: 0,
+      };
+      current.calls += 1;
+      current.totalTokens += event.totalTokens;
+      current.costUsd += event.costUsd;
+      map.set(key, current);
+      return map;
+    }, new Map<string, { keyName: string; calls: number; totalTokens: number; costUsd: number }>()),
+  ).sort((a, b) => b[1].costUsd - a[1].costUsd).map(([, value]) => value);
+
   const byUser = Array.from(
     events.reduce((map, event) => {
       const key = event.userId ?? "unknown";
@@ -147,28 +164,28 @@ export default async function AdminAiCostsPage() {
         {[
           {
             label: "Toplam API Maliyeti",
-            value: formatUsd(totalCost),
+            value: formatCost(totalCost),
             sub: `${formatInt(events.length)} exact çağrı`,
             icon: DollarSign,
             color: "var(--color-destructive)",
           },
           {
             label: "Bu Ay",
-            value: formatUsd(monthCost),
+            value: formatCost(monthCost),
             sub: `${formatInt(monthEvents.length)} çağrı`,
             icon: BarChart3,
             color: "var(--color-warning)",
           },
           {
             label: "Son 7 Gün",
-            value: formatUsd(weekCost),
+            value: formatCost(weekCost),
             sub: `${formatInt(weekEvents.length)} çağrı`,
             icon: ReceiptText,
             color: "var(--color-primary)",
           },
           {
             label: "Çağrı Başına Ortalama",
-            value: formatUsd(averageCostPerCall, 5),
+            value: formatCost(averageCostPerCall, 4),
             sub: `${formatInt(totalTokens)} toplam token`,
             icon: Coins,
             color: "var(--color-success)",
@@ -217,7 +234,7 @@ export default async function AdminAiCostsPage() {
             {dailySeries.map((day) => (
               <div key={day.key} className="flex flex-col items-center gap-2">
                 <div className="text-[11px] font-medium" style={{ color: "var(--color-text-secondary)" }}>
-                  {formatUsd(day.costUsd, 4)}
+                  {formatCost(day.costUsd, 4)}
                 </div>
                 <div
                   className="w-full max-w-[44px] rounded-t-lg"
@@ -267,7 +284,7 @@ export default async function AdminAiCostsPage() {
               <div className="flex items-center justify-between">
                 <span style={{ color: "var(--color-text-secondary)" }}>1K token maliyeti</span>
                 <strong style={{ color: "var(--color-text-primary)" }}>
-                  {formatUsd(totalTokens > 0 ? (totalCost / totalTokens) * 1000 : 0, 5)}
+                  {formatCost(totalTokens > 0 ? (totalCost / totalTokens) * 1000 : 0, 4)}
                 </strong>
               </div>
             </div>
@@ -295,7 +312,7 @@ export default async function AdminAiCostsPage() {
                   {formatInt(byModel[0].calls)} çağrı, {formatInt(byModel[0].totalTokens)} token
                 </p>
                 <p className="text-sm font-semibold" style={{ color: "var(--color-success)" }}>
-                  {formatUsd(byModel[0].costUsd)}
+                  {formatCost(byModel[0].costUsd)}
                 </p>
               </div>
             ) : (
@@ -307,7 +324,7 @@ export default async function AdminAiCostsPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 xl:grid-cols-4 gap-6">
         <section
           className="rounded-xl overflow-hidden"
           style={{
@@ -335,7 +352,7 @@ export default async function AdminAiCostsPage() {
                       {formatInt(item.calls)} çağrı · {formatInt(item.totalTokens)} token
                     </p>
                   </div>
-                  <strong style={{ color: "var(--color-success)" }}>{formatUsd(item.costUsd)}</strong>
+                  <strong style={{ color: "var(--color-success)" }}>{formatCost(item.costUsd)}</strong>
                 </div>
               </div>
             ))}
@@ -369,7 +386,7 @@ export default async function AdminAiCostsPage() {
                       {formatInt(item.calls)} çağrı · {formatInt(item.totalTokens)} token
                     </p>
                   </div>
-                  <strong style={{ color: "var(--color-success)" }}>{formatUsd(item.costUsd)}</strong>
+                  <strong style={{ color: "var(--color-success)" }}>{formatCost(item.costUsd)}</strong>
                 </div>
               </div>
             ))}
@@ -403,7 +420,41 @@ export default async function AdminAiCostsPage() {
                       {formatInt(item.calls)} çağrı · {formatInt(item.totalTokens)} token
                     </p>
                   </div>
-                  <strong style={{ color: "var(--color-success)" }}>{formatUsd(item.costUsd)}</strong>
+                  <strong style={{ color: "var(--color-success)" }}>{formatCost(item.costUsd)}</strong>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section
+          className="rounded-xl overflow-hidden"
+          style={{
+            backgroundColor: "var(--color-surface-elevated)",
+            border: "1px solid var(--color-border)",
+          }}
+        >
+          <div className="px-5 py-4 border-b" style={{ borderColor: "var(--color-border)" }}>
+            <div className="flex items-center gap-2">
+              <Cpu size={15} style={{ color: "var(--color-success)" }} />
+              <h3 className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                Key Bazında
+              </h3>
+            </div>
+          </div>
+          <div className="divide-y" style={{ borderColor: "var(--color-border)" }}>
+            {byKey.slice(0, 8).map((item) => (
+              <div key={item.keyName} className="px-5 py-4">
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-sm font-semibold" style={{ color: "var(--color-text-primary)" }}>
+                      {item.keyName}
+                    </p>
+                    <p className="text-xs mt-1" style={{ color: "var(--color-text-secondary)" }}>
+                      {formatInt(item.calls)} çağrı · {formatInt(item.totalTokens)} token
+                    </p>
+                  </div>
+                  <strong style={{ color: "var(--color-success)" }}>{formatCost(item.costUsd)}</strong>
                 </div>
               </div>
             ))}
@@ -431,7 +482,7 @@ export default async function AdminAiCostsPage() {
             <table className="w-full border-collapse min-w-[760px]">
               <thead>
                 <tr style={{ borderBottom: "1px solid var(--color-border)" }}>
-                  {["Zaman", "Kullanıcı", "Modül", "Model", "Input", "Output", "Maliyet"].map((label) => (
+                  {["Zaman", "Kullanıcı", "Modül", "Model", "Key", "Input", "Output", "Maliyet"].map((label) => (
                     <th
                       key={label}
                       className="text-left px-5 py-3 text-xs font-semibold uppercase tracking-wider"
@@ -458,13 +509,16 @@ export default async function AdminAiCostsPage() {
                       {event.model}
                     </td>
                     <td className="px-5 py-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>
+                      {event.keyName ?? "legacy/global"}
+                    </td>
+                    <td className="px-5 py-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>
                       {formatInt(event.inputTokens)}
                     </td>
                     <td className="px-5 py-3 text-sm" style={{ color: "var(--color-text-secondary)" }}>
                       {formatInt(event.outputTokens)}
                     </td>
                     <td className="px-5 py-3 text-sm font-semibold" style={{ color: "var(--color-success)" }}>
-                      {formatUsd(event.costUsd, 5)}
+                      {formatCost(event.costUsd, 4)}
                     </td>
                   </tr>
                 ))}

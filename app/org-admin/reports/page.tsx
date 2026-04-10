@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { redirect } from "next/navigation";
 import { BarChart3, Calendar, TrendingUp, DollarSign } from "lucide-react";
+import { getCurrencySettings } from "@/lib/currency";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,10 @@ function fmt(n: number, d = 2) {
 }
 
 export default async function OrgReportsPage() {
-  const supabase = await createClient();
+  const [supabase, currency] = await Promise.all([
+    createClient(),
+    getCurrencySettings(),
+  ]);
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -102,13 +106,13 @@ export default async function OrgReportsPage() {
           },
           {
             label: "Toplam Maliyet",
-            value: `$${fmt(totalCost, 4)}`,
+            value: currency.formatTryFromUsd(totalCost),
             icon: DollarSign,
             color: "var(--color-warning)",
           },
           {
             label: "Ort. Günlük Maliyet",
-            value: `$${fmt(avgDailyCost, 4)}`,
+            value: currency.formatTryFromUsd(avgDailyCost),
             icon: TrendingUp,
             color: "var(--color-success)",
           },
@@ -183,7 +187,7 @@ export default async function OrgReportsPage() {
                   "Aktif Kullanıcı",
                   "Giriş Tok.",
                   "Çıkış Tok.",
-                  "Maliyet (USD)",
+                  "Maliyet (TRY)",
                 ].map((h) => (
                   <th
                     key={h}
@@ -235,7 +239,7 @@ export default async function OrgReportsPage() {
                     className="px-5 py-3 text-sm font-mono font-semibold"
                     style={{ color: "var(--color-warning)" }}
                   >
-                    ${fmt(data.costUsd, 5)}
+                    {currency.formatTryFromUsd(data.costUsd)}
                   </td>
                 </tr>
               ))}
@@ -280,7 +284,7 @@ export default async function OrgReportsPage() {
                   className="px-5 py-3 text-sm font-mono font-bold"
                   style={{ color: "var(--color-warning)" }}
                 >
-                  ${fmt(totalCost, 5)}
+                  {currency.formatTryFromUsd(totalCost)}
                 </td>
               </tr>
             </tfoot>
@@ -312,7 +316,7 @@ export default async function OrgReportsPage() {
             [
               "Aylık Bütçe",
               org.monthlyBudgetUsd
-                ? `$${fmt(org.monthlyBudgetUsd)}`
+                ? currency.formatTryFromUsd(org.monthlyBudgetUsd)
                 : "Tanımsız",
             ],
           ].map(([k, v]) => (
