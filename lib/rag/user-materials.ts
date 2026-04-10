@@ -14,6 +14,9 @@ import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
 import { requireGeminiApiKey } from "@/lib/ai/env";
+import { normalizeGeminiError } from "@/lib/ai/google-errors";
+import { ensureMaterialsSchema } from "@/lib/db/schema-guard";
+import { getManagedUserDrivePlan } from "@/lib/gdrive/client";
 import { splitTextIntoChunks } from "./service";
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
@@ -27,10 +30,26 @@ export interface UserMaterial {
   source: "upload" | "gdrive";
   driveFileId: string | null;
   driveWebViewLink: string | null;
+  managedDriveFileId?: string | null;
+  managedDriveProcessedFileId?: string | null;
+  managedDriveArchiveFileId?: string | null;
   branch: string;
   chunkCount: number;
   pageCount: number | null;
   errorMessage: string | null;
+  managedDrivePath?: string;
+  managedProcessedPath?: string;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+export interface MaterialMark {
+  id: string;
+  userId: string;
+  materialId: string;
+  slideNo: number | null;
+  color: string;
+  note: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -39,6 +58,7 @@ export interface IngestResult {
   materialId: string;
   chunkCount: number;
   pageCount?: number;
+  extractedText?: string;
 }
 
 // ─── Supabase client ─────────────────────────────────────────────────────────
@@ -49,7 +69,7 @@ function getSupabase() {
 }
 
 function getEmbedder() {
-  return new GoogleGenerativeAI(requireGeminiApiKey()).getGenerativeModel({
+  return new GoogleGenerativeAI(requireGeminiApiKey("embeddings")).getGenerativeModel({
     model: "text-embedding-004",
   });
 }
@@ -64,14 +84,24 @@ export async function createMaterial(data: {
   driveFileId?: string;
   driveWebViewLink?: string;
   branch?: string;
+  managedDriveFileId?: string | null;
+  managedDriveProcessedFileId?: string | null;
+  managedDriveArchiveFileId?: string | null;
 }): Promise<string> {
+  await ensureMaterialsSchema();
   const rows = await prisma.$queryRaw<{ id: string }[]>`
-    INSERT INTO user_materials (id, user_id, name, type, size_bytes, status, source, drive_file_id, drive_web_view_link, branch, chunk_count)
+    INSERT INTO user_materials (
+      id, user_id, name, type, size_bytes, status, source, drive_file_id, drive_web_view_link, branch, chunk_count,
+      managed_drive_file_id, managed_drive_processed_file_id, managed_drive_archive_file_id
+    )
     VALUES (
       gen_random_uuid()::text, ${data.userId}, ${data.name}, ${data.type},
       ${data.sizeBytes ?? null}, 'processing', ${data.source},
       ${data.driveFileId ?? null}, ${data.driveWebViewLink ?? null},
-      ${data.branch ?? "Genel"}, 0
+      ${data.branch ?? "Genel"}, 0,
+      ${data.managedDriveFileId ?? null},
+      ${data.managedDriveProcessedFileId ?? null},
+      ${data.managedDriveArchiveFileId ?? null}
     )
     RETURNING id
   `;
@@ -86,11 +116,33 @@ async function updateMaterial(
   pageCount?: number,
   errorMessage?: string,
 ) {
+  await ensureMaterialsSchema();
   await prisma.$executeRaw`
     UPDATE user_materials
     SET status = ${status}, chunk_count = ${chunkCount},
         page_count = ${pageCount ?? null},
         error_message = ${errorMessage ?? null},
+        updated_at = NOW()
+    WHERE id = ${materialId}
+  `;
+}
+
+export async function updateMaterialDriveArtifacts(
+  materialId: string,
+  data: {
+    managedDriveFileId?: string | null;
+    managedDriveProcessedFileId?: string | null;
+    managedDriveArchiveFileId?: string | null;
+    driveWebViewLink?: string | null;
+  },
+): Promise<void> {
+  await ensureMaterialsSchema();
+  await prisma.$executeRaw`
+    UPDATE user_materials
+    SET managed_drive_file_id = COALESCE(${data.managedDriveFileId ?? null}, managed_drive_file_id),
+        managed_drive_processed_file_id = COALESCE(${data.managedDriveProcessedFileId ?? null}, managed_drive_processed_file_id),
+        managed_drive_archive_file_id = COALESCE(${data.managedDriveArchiveFileId ?? null}, managed_drive_archive_file_id),
+        drive_web_view_link = COALESCE(${data.driveWebViewLink ?? null}, drive_web_view_link),
         updated_at = NOW()
     WHERE id = ${materialId}
   `;
@@ -110,7 +162,12 @@ async function embedAndInsertChunks(
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
-    const result = await embedder.embedContent(chunk);
+    let result;
+    try {
+      result = await embedder.embedContent(chunk);
+    } catch (error) {
+      throw normalizeGeminiError(error);
+    }
     const embedding = result.embedding.values;
 
     const { error } = await supabase.rpc("insert_user_document_chunk", {
@@ -209,14 +266,14 @@ export async function processMaterial(
 
     if (!text.trim()) {
       await updateMaterial(materialId, "failed", 0, pageCount, "Dosyadan metin çıkarılamadı.");
-      return { materialId, chunkCount: 0 };
+      return { materialId, chunkCount: 0, extractedText: "" };
     }
 
     const chunks = splitTextIntoChunks(text, 1000, 150);
     const chunkCount = await embedAndInsertChunks(userId, materialId, name, branch, chunks);
     await updateMaterial(materialId, "ready", chunkCount, pageCount);
 
-    return { materialId, chunkCount, pageCount };
+    return { materialId, chunkCount, pageCount, extractedText: text };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     await updateMaterial(materialId, "failed", 0, undefined, msg);
@@ -226,22 +283,32 @@ export async function processMaterial(
 
 // ─── Materyal listesi ────────────────────────────────────────────────────────
 export async function listUserMaterials(userId: string): Promise<UserMaterial[]> {
+  await ensureMaterialsSchema();
   const rows = await prisma.$queryRaw<any[]>`
     SELECT
       id, user_id AS "userId", name, type, size_bytes AS "sizeBytes",
       status, source, drive_file_id AS "driveFileId",
-      drive_web_view_link AS "driveWebViewLink", branch,
+      drive_web_view_link AS "driveWebViewLink",
+      managed_drive_file_id AS "managedDriveFileId",
+      managed_drive_processed_file_id AS "managedDriveProcessedFileId",
+      managed_drive_archive_file_id AS "managedDriveArchiveFileId",
+      branch,
       chunk_count AS "chunkCount", page_count AS "pageCount",
       error_message AS "errorMessage", created_at AS "createdAt", updated_at AS "updatedAt"
     FROM user_materials
     WHERE user_id = ${userId}
     ORDER BY created_at DESC
   `;
-  return rows;
+  return rows.map((row) => ({
+    ...row,
+    managedDrivePath: getManagedUserDrivePlan(userId, "inbox").folderPath,
+    managedProcessedPath: getManagedUserDrivePlan(userId, "processed").folderPath,
+  }));
 }
 
 // ─── Materyal sil ────────────────────────────────────────────────────────────
 export async function deleteMaterial(userId: string, materialId: string): Promise<void> {
+  await ensureMaterialsSchema();
   // Chunks will be deleted by CASCADE
   await prisma.$executeRaw`
     DELETE FROM user_materials WHERE id = ${materialId} AND user_id = ${userId}
@@ -250,6 +317,7 @@ export async function deleteMaterial(userId: string, materialId: string): Promis
 
 // ─── Materyal istatistikleri ─────────────────────────────────────────────────
 export async function getMaterialStats(userId: string) {
+  await ensureMaterialsSchema();
   const rows = await prisma.$queryRaw<{ total: bigint; chunks: bigint; branches: bigint }[]>`
     SELECT
       COUNT(*)::bigint AS total,
@@ -267,9 +335,14 @@ export async function getMaterialStats(userId: string) {
 
 // ─── Belirli materialler için RAG ────────────────────────────────────────────
 export async function getMaterialById(userId: string, materialId: string): Promise<UserMaterial | null> {
+  await ensureMaterialsSchema();
   const rows = await prisma.$queryRaw<any[]>`
     SELECT id, user_id AS "userId", name, type, status, branch, chunk_count AS "chunkCount",
-           page_count AS "pageCount", source, created_at AS "createdAt"
+           page_count AS "pageCount", source, drive_web_view_link AS "driveWebViewLink",
+           managed_drive_file_id AS "managedDriveFileId",
+           managed_drive_processed_file_id AS "managedDriveProcessedFileId",
+           managed_drive_archive_file_id AS "managedDriveArchiveFileId",
+           created_at AS "createdAt"
     FROM user_materials WHERE id = ${materialId} AND user_id = ${userId} LIMIT 1
   `;
   return rows[0] ?? null;
@@ -278,4 +351,68 @@ export async function getMaterialById(userId: string, materialId: string): Promi
 // ─── Dosya hash kontrolü (tekrar yükleme engeli) ─────────────────────────────
 export function computeFileHash(buffer: Buffer): string {
   return crypto.createHash("sha256").update(buffer).digest("hex");
+}
+
+export function getManagedMaterialPaths(userId: string) {
+  return {
+    inbox: getManagedUserDrivePlan(userId, "inbox").folderPath,
+    processed: getManagedUserDrivePlan(userId, "processed").folderPath,
+    archive: getManagedUserDrivePlan(userId, "archive").folderPath,
+  };
+}
+
+export async function addMaterialMark(input: {
+  userId: string;
+  materialId: string;
+  note: string;
+  color?: string;
+  slideNo?: number | null;
+}): Promise<MaterialMark> {
+  await ensureMaterialsSchema();
+  const note = input.note.trim();
+  if (!note) throw new Error("Not metni boş olamaz.");
+
+  const rows = await prisma.$queryRaw<MaterialMark[]>`
+    INSERT INTO public.user_material_marks (
+      user_id, material_id, slide_no, color, note, created_at, updated_at
+    )
+    VALUES (
+      ${input.userId},
+      ${input.materialId},
+      ${input.slideNo ?? null},
+      ${(input.color ?? "yellow").trim() || "yellow"},
+      ${note},
+      NOW(),
+      NOW()
+    )
+    RETURNING
+      id,
+      user_id AS "userId",
+      material_id AS "materialId",
+      slide_no AS "slideNo",
+      color,
+      note,
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+  `;
+  return rows[0]!;
+}
+
+export async function listMaterialMarks(userId: string, materialId: string): Promise<MaterialMark[]> {
+  await ensureMaterialsSchema();
+  return prisma.$queryRaw<MaterialMark[]>`
+    SELECT
+      id,
+      user_id AS "userId",
+      material_id AS "materialId",
+      slide_no AS "slideNo",
+      color,
+      note,
+      created_at AS "createdAt",
+      updated_at AS "updatedAt"
+    FROM public.user_material_marks
+    WHERE user_id = ${userId}
+      AND material_id = ${materialId}
+    ORDER BY created_at DESC
+  `;
 }

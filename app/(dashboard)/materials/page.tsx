@@ -21,6 +21,7 @@ import {
   BarChart2,
   HardDrive,
   Zap,
+  BookmarkPlus,
 } from "lucide-react";
 import { TUS_SUBJECTS } from "@/constants/tus";
 
@@ -38,6 +39,9 @@ interface Material {
   driveWebViewLink: string | null;
   errorMessage: string | null;
   createdAt: string;
+  managedDriveFileId?: string | null;
+  managedDriveProcessedFileId?: string | null;
+  managedDriveArchiveFileId?: string | null;
 }
 
 interface Stats {
@@ -53,8 +57,89 @@ interface Quota {
   plan: string;
 }
 
+interface LibraryFile {
+  id: string;
+  name: string;
+  mimeType: string;
+  webViewLink: string | null;
+  bucket: string;
+}
+
+interface HandshakeStatus {
+  serviceAccountFilePresent: boolean;
+  rootFolderConfigured: boolean;
+  rootFolderReachable: boolean;
+  rootFolderId: string | null;
+  ready: boolean;
+}
+
+type DriveImportTarget = {
+  fileId: string;
+  fileName: string;
+  branch: string;
+  materialType: (typeof MATERIAL_TYPES)[number];
+};
+
+function getDriveErrorMessage(reason: string | null) {
+  switch (reason) {
+    case "invalid_state":
+      return "Google Drive oturumu zaman aşımına uğradı. Lütfen bağlantıyı yeniden başlatın.";
+    case "token_exchange":
+      return "Google Drive yetkilendirmesi tamamlandı ancak token alınamadı. OAuth ayarlarını kontrol edin.";
+    case "access_denied":
+      return "Google Drive erişim izni verilmedi.";
+    case "missing_params":
+      return "Google Drive geri dönüşünde eksik parametre alındı.";
+    default:
+      return "Google Drive bağlantısı tamamlanamadı.";
+  }
+}
+
+function getDriveImportErrorMessage(reason: string | null) {
+  switch (reason) {
+    case "reauth_required":
+      return "Drive oturumu yenilenmeli. Lütfen bağlantıyı yeniden başlatın.";
+    case "needs_connection":
+      return "Drive bağlı değil. Önce Drive hesabınızı bağlayın.";
+    case "access_denied":
+      return "Bu Drive dosyasına erişim izniniz yok.";
+    case "file_not_found":
+      return "Drive dosyası bulunamadı veya bağlantı geçersiz.";
+    case "export_unsupported":
+      return "Bu Google dosya tipi indirilebilir bir formata dönüştürülemiyor.";
+    case "download_failed":
+      return "Drive dosyası indirilemedi. Lütfen tekrar deneyin.";
+    default:
+      return "Drive aktarımı sırasında bir hata oluştu.";
+  }
+}
+
+function getDriveRecoveryActions(reason: string | null): Array<"retry" | "connect"> {
+  switch (reason) {
+    case "needs_connection":
+    case "reauth_required":
+      return ["connect"];
+    case "download_failed":
+    case "token_exchange":
+    case "invalid_state":
+      return ["retry"];
+    case "access_denied":
+      return ["connect", "retry"];
+    default:
+      return ["retry"];
+  }
+}
+
 // ─── Yardımcılar ─────────────────────────────────────────────────────────────
 const BRANCHES = ["Genel", ...TUS_SUBJECTS];
+const MATERIAL_TYPES = [
+  "Genel",
+  "Ders Notu",
+  "Slayt",
+  "Video",
+  "Ses Kaydi",
+  "Textbook",
+] as const;
 
 function extractDriveFileId(input: string): string | null {
   const value = input.trim();
@@ -114,17 +199,28 @@ export default function MaterialsPage() {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [stats, setStats] = useState<Stats>({ total: 0, chunks: 0, branches: 0 });
   const [quota, setQuota] = useState<Quota | null>(null);
+  const [libraryFiles, setLibraryFiles] = useState<LibraryFile[]>([]);
+  const [driveHandshake, setDriveHandshake] = useState<HandshakeStatus | null>(null);
   const [showUpgradeModal, setShowUpgradeModal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string>("");
   const [driveConnected, setDriveConnected] = useState(false);
+  const [driveReauthRequired, setDriveReauthRequired] = useState(false);
+  const [driveConfigured, setDriveConfigured] = useState(true);
+  const [driveMissingConfig, setDriveMissingConfig] = useState<string[]>([]);
+  const [driveStatusMessage, setDriveStatusMessage] = useState("");
   const [driveLoading, setDriveLoading] = useState(false);
   const [selectedBranch, setSelectedBranch] = useState("Genel");
+  const [selectedMaterialType, setSelectedMaterialType] =
+    useState<(typeof MATERIAL_TYPES)[number]>("Genel");
   const [showBranchDropdown, setShowBranchDropdown] = useState(false);
   const [filterStatus, setFilterStatus] = useState<"all" | "ready" | "processing" | "failed">("all");
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState("");
+  const [errorMsg, setErrorMsg] = useState("");
+  const [lastDriveImport, setLastDriveImport] = useState<DriveImportTarget | null>(null);
+  const [lastDriveImportReason, setLastDriveImportReason] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
@@ -140,10 +236,27 @@ export default function MaterialsPage() {
         const data = await matsRes.json();
         setMaterials(data.materials ?? []);
         setStats(data.stats ?? { total: 0, chunks: 0, branches: 0 });
+        setLibraryFiles(Array.isArray(data.library?.files) ? data.library.files : []);
+        setDriveHandshake(data.managedDrive?.handshake ?? null);
       }
       if (driveRes.ok) {
         const d = await driveRes.json();
-        setDriveConnected(d.connected ?? false);
+        const configured = d.configured !== false;
+        setDriveConfigured(configured);
+        setDriveMissingConfig(Array.isArray(d.missingConfig) ? d.missingConfig : []);
+        setDriveConnected(configured ? (d.connected ?? false) : false);
+        setDriveReauthRequired(configured ? (d.reauthRequired ?? false) : false);
+        setDriveStatusMessage(
+          typeof d.message === "string" && d.message.length > 0
+            ? d.message
+            : configured
+              ? d.reauthRequired
+                ? "Drive oturumu yenilenmeli. Devam etmek için bağlantıyı tekrar kurun."
+                : d.connected
+                  ? "Drive hesabı bağlı. Dosya seçerek içe aktarabilirsiniz."
+                  : "Drive hesabı bağlı değil. İçeri aktarmak için önce bağlanın."
+              : "Google Drive OAuth yapılandırması eksik.",
+        );
       }
       if (quotaRes.ok) {
         const q = await quotaRes.json();
@@ -168,12 +281,22 @@ export default function MaterialsPage() {
     const params = new URLSearchParams(window.location.search);
     const gdriveParam = params.get("gdrive");
     const driveParam = params.get("drive");
+    const reason = params.get("reason");
     if (gdriveParam === "connected" || driveParam === "connected") {
       setSuccessMsg("Google Drive başarıyla bağlandı!");
       setDriveConnected(true);
+      setDriveReauthRequired(false);
+      setDriveStatusMessage("Drive hesabı bağlı. Dosya seçerek içe aktarabilirsiniz.");
       window.history.replaceState({}, "", "/materials");
     } else if (gdriveParam === "error" || driveParam === "error") {
       setSuccessMsg("");
+      const message = getDriveErrorMessage(reason);
+      setErrorMsg(message);
+      setDriveStatusMessage(message);
+      if (reason === "invalid_state" || reason === "token_exchange") {
+        setDriveConnected(false);
+        setDriveReauthRequired(true);
+      }
       window.history.replaceState({}, "", "/materials");
     }
   }, []);
@@ -186,11 +309,13 @@ export default function MaterialsPage() {
     const form = new FormData();
     form.append("file", file);
     form.append("branch", selectedBranch);
+    form.append("materialType", selectedMaterialType);
 
     try {
       const res = await fetch("/api/materials/upload", { method: "POST", body: form });
       const data = await res.json();
       if (!res.ok) {
+        setErrorMsg(data.error ?? "Yükleme sırasında hata oluştu.");
         if (res.status === 409) {
           setUploadProgress(`"${file.name}" zaten yüklü.`);
         } else {
@@ -207,6 +332,72 @@ export default function MaterialsPage() {
       setTimeout(() => setUploadProgress(""), 5000);
     }
   };
+
+  const importDriveMaterial = useCallback(
+    async (target: DriveImportTarget) => {
+      setLastDriveImport(target);
+      setLastDriveImportReason(null);
+      setSuccessMsg("");
+      setErrorMsg("");
+      setDriveStatusMessage("Drive aktarımı başlatılıyor...");
+
+      try {
+        const res = await fetch("/api/materials/gdrive", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fileId: target.fileId,
+            fileName: target.fileName,
+            branch: target.branch,
+            materialType: target.materialType,
+          }),
+        });
+        const d = await res.json();
+
+        if (d.success) {
+          setErrorMsg("");
+          setLastDriveImportReason(null);
+          if (d.status === "exists") {
+            setSuccessMsg(d.message ?? "Bu Drive dosyası zaten eklenmiş.");
+          } else {
+            const displayName = d.name ?? target.fileName;
+            setSuccessMsg(`"${displayName}" Drive'dan aktarılıyor...`);
+          }
+          setDriveStatusMessage("Drive aktarımı kuyruğa alındı.");
+          fetchData();
+          setTimeout(() => setSuccessMsg(""), 5000);
+          return;
+        }
+
+        if (d.needsConnection) {
+          setDriveConnected(false);
+          setDriveReauthRequired(true);
+        }
+        if (d.reauthRequired) {
+          setDriveConnected(false);
+          setDriveReauthRequired(true);
+        }
+
+        const reason = typeof d.reason === "string" ? d.reason : null;
+        const message = reason ? getDriveImportErrorMessage(reason) : d.error || "Hata oluştu.";
+        setLastDriveImportReason(reason);
+        setErrorMsg(message);
+        setDriveStatusMessage(message);
+      } catch {
+        setLastDriveImportReason("download_failed");
+        setErrorMsg("Drive aktarımı sırasında bir hata oluştu.");
+        setDriveStatusMessage("Drive aktarımı sırasında bir hata oluştu.");
+      }
+    },
+    [fetchData],
+  );
+
+  const retryLastDriveImport = useCallback(() => {
+    if (!lastDriveImport) return;
+    setErrorMsg("");
+    setSuccessMsg("");
+    void importDriveMaterial(lastDriveImport);
+  }, [importDriveMaterial, lastDriveImport]);
 
   const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -230,17 +421,37 @@ export default function MaterialsPage() {
     try {
       const res = await fetch("/api/auth/gdrive?action=connect");
       const data = await res.json();
+      if (data.configured === false) {
+        setDriveConfigured(false);
+        setDriveMissingConfig(Array.isArray(data.missingConfig) ? data.missingConfig : []);
+        setDriveStatusMessage(
+          "Google Drive OAuth yapılandırması eksik: " +
+          (Array.isArray(data.missingConfig) && data.missingConfig.length > 0
+            ? data.missingConfig.join(", ")
+            : "Drive OAuth env değişkenleri"),
+        );
+        setErrorMsg(
+          "Google yapılandırması eksik: " +
+          (Array.isArray(data.missingConfig) && data.missingConfig.length > 0
+            ? data.missingConfig.join(", ")
+            : "Drive OAuth env değişkenleri"),
+        );
+        return;
+      }
       if (!res.ok) {
-        alert(data.error ?? "Drive bağlantısı başlatılamadı.");
+        setDriveStatusMessage(data.error ?? "Drive bağlantısı başlatılamadı.");
+        setErrorMsg(data.error ?? "Drive bağlantısı başlatılamadı.");
         return;
       }
       if (data.authUrl) {
         window.location.href = data.authUrl;
         return;
       }
-      alert(data.message ?? "Drive bağlantısı için sistem yapılandırması eksik.");
+      setDriveStatusMessage(data.message ?? "Drive bağlantısı için sistem yapılandırması eksik.");
+      setErrorMsg(data.message ?? "Drive bağlantısı için sistem yapılandırması eksik.");
     } catch {
-      alert("Drive bağlantısı başlatılamadı.");
+      setDriveStatusMessage("Drive bağlantısı başlatılamadı.");
+      setErrorMsg("Drive bağlantısı başlatılamadı.");
     } finally {
       setDriveLoading(false);
     }
@@ -259,55 +470,65 @@ export default function MaterialsPage() {
     if (!fileInput) return;
     const fileId = extractDriveFileId(fileInput);
     if (!fileId) {
-      alert("Geçerli bir Drive dosya linki veya ID girin.");
+      setErrorMsg("Geçerli bir Drive dosya linki veya ID girin.");
       return;
     }
 
     const fileName = prompt("Dosya adı (opsiyonel):") || "Drive Dosyası";
-
-    fetch("/api/materials/gdrive", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        fileId: fileId.trim(),
-        fileName,
-        branch: selectedBranch,
-      }),
-    })
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.success) {
-          if (d.status === "exists") {
-            setSuccessMsg(d.message ?? "Bu Drive dosyası zaten eklenmiş.");
-          } else {
-            const displayName = d.name ?? fileName;
-            setSuccessMsg(`"${displayName}" Drive'dan aktarılıyor...`);
-          }
-          fetchData();
-          setTimeout(() => setSuccessMsg(""), 5000);
-        } else {
-          if (d.needsConnection) setDriveConnected(false);
-          alert(d.error ?? "Hata oluştu.");
-        }
-      });
+    void importDriveMaterial({
+      fileId: fileId.trim(),
+      fileName,
+      branch: selectedBranch,
+      materialType: selectedMaterialType,
+    });
   };
 
   // ─── Sil ─────────────────────────────────────────────────────────────────
   const deleteMat = async (id: string) => {
-    await fetch(`/api/materials/${id}`, { method: "DELETE" });
+    await fetch(`/api/materials?id=${id}`, { method: "DELETE" });
     setDeleteConfirm(null);
     fetchData();
+  };
+
+  const addMarkToMaterial = async (material: Material) => {
+    const slideNoInput = prompt("Sayfa/Slayt numarası (opsiyonel):", "");
+    const note = prompt("İşaret notu:", "");
+    if (!note) return;
+    const parsedSlideNo = slideNoInput ? Number(slideNoInput) : null;
+    try {
+      const res = await fetch(`/api/materials/${material.id}/marks`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slideNo: Number.isFinite(parsedSlideNo) ? parsedSlideNo : null,
+          note,
+          color: "yellow",
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setErrorMsg(data.error ?? "İşaret kaydedilemedi.");
+        return;
+      }
+      setSuccessMsg("İşaret kaydedildi.");
+      setTimeout(() => setSuccessMsg(""), 3000);
+    } catch {
+      setErrorMsg("İşaret eklenirken hata oluştu.");
+    }
   };
 
   // ─── Filtrele ─────────────────────────────────────────────────────────────
   const filtered = materials.filter((m) =>
     filterStatus === "all" ? true : m.status === filterStatus,
   );
+  const driveRecoveryActions = lastDriveImportReason
+    ? getDriveRecoveryActions(lastDriveImportReason)
+    : [];
 
   // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <>
-    <div className="min-h-screen bg-[#0a0a0f] text-white p-6">
+    <div className="min-h-screen rounded-[28px] border p-6 shadow-sm" style={{ background: "var(--color-background)", borderColor: "var(--color-border)" }}>
       {/* Header */}
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
@@ -319,10 +540,11 @@ export default function MaterialsPage() {
             <p className="text-slate-400 text-sm">PDF, sunum ve dökümanlarınızı AI ile kullanın</p>
           </div>
         </div>
-        <button
-          onClick={fetchData}
-          className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
-        >
+          <button
+            onClick={fetchData}
+            className="p-2 rounded-lg transition-colors"
+            style={{ color: "var(--color-text-secondary)" }}
+          >
           <RefreshCw className="w-4 h-4" />
         </button>
       </div>
@@ -333,6 +555,48 @@ export default function MaterialsPage() {
           <CheckCircle className="w-4 h-4 shrink-0" />
           {successMsg}
           <button onClick={() => setSuccessMsg("")} className="ml-auto"><X className="w-4 h-4" /></button>
+        </div>
+      )}
+
+      {errorMsg && (
+        <div className="mb-4 flex items-center gap-2 rounded-xl border px-4 py-3 text-sm" style={{ borderColor: "color-mix(in srgb, var(--color-destructive) 30%, transparent)", backgroundColor: "color-mix(in srgb, var(--color-destructive) 10%, transparent)", color: "var(--color-destructive)" }}>
+          <AlertCircle className="w-4 h-4 shrink-0" />
+            <span className="flex-1">{errorMsg}</span>
+          <div className="ml-auto flex items-center gap-2">
+            {lastDriveImport && lastDriveImportReason && (
+              <>
+                {driveRecoveryActions.includes("retry") && (
+                  <button
+                    onClick={retryLastDriveImport}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+                    style={{
+                      borderColor: "color-mix(in srgb, var(--color-destructive) 30%, transparent)",
+                      backgroundColor: "color-mix(in srgb, var(--color-destructive) 14%, transparent)",
+                      color: "var(--color-destructive)",
+                    }}
+                  >
+                    Tekrar Dene
+                  </button>
+                )}
+                {driveRecoveryActions.includes("connect") && (
+                  <button
+                    onClick={() => void connectDrive()}
+                    className="rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors"
+                    style={{
+                      borderColor: "color-mix(in srgb, var(--color-primary) 30%, transparent)",
+                      backgroundColor: "color-mix(in srgb, var(--color-primary) 14%, transparent)",
+                      color: "var(--color-primary)",
+                    }}
+                  >
+                    Drive'ı Yeniden Bağla
+                  </button>
+                )}
+              </>
+            )}
+            <button onClick={() => setErrorMsg("")} className="rounded-lg p-1 transition-colors hover:bg-white/5">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       )}
 
@@ -399,6 +663,26 @@ export default function MaterialsPage() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Sol: Yükleme alanı */}
         <div className="space-y-4">
+          {/* Materyal tipi seçici */}
+          <div className="rounded-xl border border-white/10 bg-white/[0.03] px-4 py-3">
+            <label className="mb-2 block text-xs text-slate-400">Materyal Türü</label>
+            <select
+              value={selectedMaterialType}
+              onChange={(e) =>
+                setSelectedMaterialType(
+                  e.target.value as (typeof MATERIAL_TYPES)[number],
+                )
+              }
+              className="w-full rounded-lg border border-white/10 bg-[#12131d] px-3 py-2 text-sm text-white outline-none"
+            >
+              {MATERIAL_TYPES.map((type) => (
+                <option key={type} value={type}>
+                  {type}
+                </option>
+              ))}
+            </select>
+          </div>
+
           {/* Branch seçici */}
           <div className="relative">
             <button
@@ -435,6 +719,9 @@ export default function MaterialsPage() {
             <Upload className="w-8 h-8 text-indigo-400 mx-auto mb-3" />
             <p className="text-white font-medium mb-1">Dosya Yükle</p>
             <p className="text-slate-500 text-xs mb-3">PDF, PPTX, DOCX, TXT — max 50 MB</p>
+            <p className="text-slate-400 text-[11px] mb-3">
+              Secili tur: <span className="text-indigo-300 font-medium">{selectedMaterialType}</span>
+            </p>
             <button
               disabled={uploading}
               className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
@@ -458,7 +745,7 @@ export default function MaterialsPage() {
           )}
 
           {/* Google Drive */}
-          <div className="bg-white/[0.03] border border-white/10 rounded-2xl p-4">
+          <div className="rounded-2xl p-4" style={{ backgroundColor: "color-mix(in srgb, var(--color-surface) 94%, transparent)", border: "1px solid var(--color-border)" }}>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className="w-7 h-7 rounded-lg bg-white/5 flex items-center justify-center text-xs">
@@ -466,32 +753,125 @@ export default function MaterialsPage() {
                 </div>
                 <span className="text-sm font-medium text-white">Google Drive</span>
               </div>
-              {driveConnected ? (
+              {!driveConfigured ? (
+                <span className="text-xs text-amber-400 flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> Yapılandırma eksik
+                </span>
+              ) : driveConnected ? (
                 <span className="text-xs text-emerald-400 flex items-center gap-1">
                   <CheckCircle className="w-3 h-3" /> Bağlı
+                </span>
+              ) : driveReauthRequired ? (
+                <span className="text-xs flex items-center gap-1" style={{ color: "var(--color-warning)" }}>
+                  <AlertCircle className="w-3 h-3" /> Yeniden bağlanmalı
                 </span>
               ) : (
                 <span className="text-xs text-slate-500">Bağlı değil</span>
               )}
             </div>
+            <p className="mb-3 text-xs leading-relaxed" style={{ color: "var(--color-text-secondary)" }}>
+              {driveStatusMessage}
+            </p>
+            {driveHandshake && (
+              <div className="mb-3 rounded-lg border border-white/10 bg-white/[0.02] px-3 py-2 text-[11px] text-slate-400">
+                Service JSON: {driveHandshake.serviceAccountFilePresent ? "OK" : "Eksik"} · Root ID: {driveHandshake.rootFolderConfigured ? "OK" : "Eksik"} · Root erişimi: {driveHandshake.rootFolderReachable ? "OK" : "Yok"}
+              </div>
+            )}
 
-            {driveConnected ? (
-              <button
-                onClick={openDrivePicker}
-                className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white transition-colors"
-              >
-                <FolderOpen className="w-4 h-4 text-yellow-400" />
-                Drive'dan Seç
-              </button>
+            {!driveConfigured ? (
+              <div className="space-y-2">
+                <button
+                  disabled
+                  className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm opacity-60 cursor-not-allowed"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--color-warning) 14%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--color-warning) 28%, transparent)",
+                    color: "var(--color-warning)",
+                  }}
+                >
+                  <AlertCircle className="w-4 h-4" />
+                  Google Yapılandırması Eksik
+                </button>
+                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                  Eksik alanlar: {driveMissingConfig.length > 0 ? driveMissingConfig.join(", ") : "Drive OAuth ayarları"}
+                </p>
+                <button
+                  onClick={() => void connectDrive()}
+                  disabled={driveLoading}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition-colors"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--color-primary) 14%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--color-primary) 28%, transparent)",
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  Yapılandırmayı Kontrol Et
+                </button>
+              </div>
+            ) : driveConnected ? (
+              <div className="space-y-2">
+                <button
+                  onClick={openDrivePicker}
+                  className="w-full flex items-center justify-center gap-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl px-4 py-2.5 text-sm text-white transition-colors"
+                >
+                  <FolderOpen className="w-4 h-4 text-yellow-400" />
+                  Drive'dan Seç
+                </button>
+                {lastDriveImport && lastDriveImportReason && (
+                  <button
+                    onClick={retryLastDriveImport}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition-colors"
+                    style={{
+                      backgroundColor: "color-mix(in srgb, var(--color-warning) 14%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--color-warning) 24%, transparent)",
+                      color: "var(--color-warning)",
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Son Drive Aktarımını Tekrar Dene
+                  </button>
+                )}
+              </div>
             ) : (
-              <button
-                onClick={connectDrive}
-                disabled={driveLoading}
-                className="w-full flex items-center justify-center gap-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 rounded-xl px-4 py-2.5 text-sm text-indigo-300 transition-colors"
-              >
-                <LinkIcon className="w-4 h-4" />
-                {driveLoading ? "Yönlendiriliyor..." : "Drive'ı Bağla"}
-              </button>
+              <div className="space-y-2">
+                <button
+                  onClick={connectDrive}
+                  disabled={driveLoading}
+                  className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition-colors"
+                  style={{
+                    backgroundColor: "color-mix(in srgb, var(--color-primary) 14%, transparent)",
+                    border: "1px solid color-mix(in srgb, var(--color-primary) 28%, transparent)",
+                    color: "var(--color-primary)",
+                  }}
+                >
+                  <LinkIcon className="w-4 h-4" />
+                  {driveLoading
+                    ? "Yönlendiriliyor..."
+                    : driveReauthRequired
+                      ? "Drive'ı Yeniden Bağla"
+                      : "Drive'ı Bağla"}
+                </button>
+                <p className="text-xs" style={{ color: "var(--color-text-secondary)" }}>
+                  {driveReauthRequired
+                    ? "Eski Drive oturumu geçersiz. Devam etmek için bağlantıyı yenileyin."
+                    : "Drive dosyalarını içe aktarmak için önce hesabınızı bağlayın."}
+                </p>
+                {lastDriveImport && lastDriveImportReason && (
+                  <button
+                    onClick={retryLastDriveImport}
+                    className="w-full flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm transition-colors"
+                    style={{
+                      backgroundColor: "color-mix(in srgb, var(--color-warning) 14%, transparent)",
+                      border: "1px solid color-mix(in srgb, var(--color-warning) 24%, transparent)",
+                      color: "var(--color-warning)",
+                    }}
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Son Denemeyi Tekrarla
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -594,12 +974,20 @@ export default function MaterialsPage() {
 
                   {/* Aksiyonlar */}
                   <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => void addMarkToMaterial(mat)}
+                      className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-yellow-300 transition-colors"
+                      title="İşaret ekle"
+                    >
+                      <BookmarkPlus className="w-3.5 h-3.5" />
+                    </button>
                     {mat.driveWebViewLink && (
                       <a
                         href={mat.driveWebViewLink}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="p-1.5 rounded-lg hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                        title="İndirmeden önizle"
                       >
                         <LinkIcon className="w-3.5 h-3.5" />
                       </a>
@@ -632,6 +1020,44 @@ export default function MaterialsPage() {
               ))}
             </div>
           )}
+
+          <div className="mt-6 rounded-2xl border border-white/10 bg-white/[0.02] p-4">
+            <div className="mb-2 flex items-center justify-between">
+              <h3 className="text-sm font-semibold text-white">01_library (Salt Okunur)</h3>
+              <span className="text-xs text-slate-500">{libraryFiles.length} dosya</span>
+            </div>
+            <p className="mb-3 text-xs text-slate-500">
+              Bu alandaki dosyaları sadece görüntüleyebilirsiniz. Silme ve değiştirme kapalıdır.
+            </p>
+            <div className="space-y-1">
+              {libraryFiles.slice(0, 8).map((item) => (
+                <div
+                  key={item.id}
+                  className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.01] px-3 py-2"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-medium text-slate-200">{item.name}</p>
+                    <p className="text-[11px] text-slate-500">{item.bucket}</p>
+                  </div>
+                  {item.webViewLink ? (
+                    <a
+                      href={item.webViewLink}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="rounded-md px-2 py-1 text-[11px] text-indigo-300 hover:bg-white/5"
+                    >
+                      Aç
+                    </a>
+                  ) : (
+                    <span className="text-[11px] text-slate-600">Link yok</span>
+                  )}
+                </div>
+              ))}
+              {libraryFiles.length === 0 && (
+                <p className="text-xs text-slate-500">Kütüphane klasörlerinde henüz dosya görünmüyor.</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
     </div>

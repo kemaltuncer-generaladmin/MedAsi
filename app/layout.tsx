@@ -1,6 +1,8 @@
 import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
+import Script from "next/script";
+import { themeBootScript } from "@/lib/theme";
 
 export const metadata: Metadata = {
   title: "Medasi — Tıp Eğitiminde Yapay Zeka",
@@ -21,8 +23,26 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="tr">
-      <body>
+    <html lang="tr" suppressHydrationWarning>
+      <head>
+        <Script
+          async
+          src="https://www.googletagmanager.com/gtag/js?id=G-26NW7Q08WF"
+          strategy="afterInteractive"
+        />
+        <Script id="google-analytics" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag(){dataLayer.push(arguments);}
+            gtag('js', new Date());
+            gtag('config', 'G-26NW7Q08WF');
+          `}
+        </Script>
+      </head>
+      <body className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] antialiased">
+        <Script id="medasi-theme-boot" strategy="beforeInteractive">
+          {themeBootScript}
+        </Script>
         {/* Klavye kullanıcıları için içeriğe atla bağlantısı (WCAG 2.4.1) */}
         <a href="#main-content" className="skip-to-content">
           İçeriğe geç
@@ -32,9 +52,9 @@ export default function RootLayout({
           position="top-right"
           toastOptions={{
             style: {
-              background: "#141419",
-              color: "#ffffff",
-              border: "1px solid #1E1E24",
+              background: "var(--color-surface-elevated)",
+              color: "var(--color-text-primary)",
+              border: "1px solid var(--color-border)",
               fontSize: "0.875rem",
             },
             error: {
