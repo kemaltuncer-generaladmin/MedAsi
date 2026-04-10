@@ -10,6 +10,7 @@ export type AiUsageEvent = {
   route: string;
   module: string | null;
   model: string;
+  keyName: string | null;
   inputTokens: number;
   outputTokens: number;
   totalTokens: number;
@@ -24,6 +25,7 @@ type RecordAiUsageTelemetryInput = {
   userId: string;
   route: string;
   model: string;
+  keyName?: string | null;
   inputTokens: number;
   outputTokens: number;
   module?: string;
@@ -82,6 +84,7 @@ export async function recordAiUsageTelemetry(
     route: input.route,
     module,
     model: input.model,
+    keyName: input.keyName ?? null,
     inputTokens,
     outputTokens,
     totalTokens,
@@ -115,6 +118,7 @@ export function parseAiUsageEventFromLog(log: SystemLogRecord): AiUsageEvent | n
         route: typeof parsed.route === "string" ? parsed.route : "unknown",
         module: typeof parsed.module === "string" ? parsed.module : null,
         model: parsed.model,
+        keyName: typeof parsed.keyName === "string" ? parsed.keyName : null,
         inputTokens: Number(parsed.inputTokens ?? 0),
         outputTokens: Number(parsed.outputTokens ?? 0),
         totalTokens: Number(parsed.totalTokens ?? 0),
@@ -151,6 +155,7 @@ export function parseAiUsageEventFromLog(log: SystemLogRecord): AiUsageEvent | n
       route: "/api/ai/chat",
       module: extractLegacyModuleName(log.message),
       model,
+      keyName: null,
       inputTokens,
       outputTokens,
       totalTokens,
