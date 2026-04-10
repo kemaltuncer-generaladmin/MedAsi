@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { X, Info, AlertTriangle, CheckCircle, AlertCircle } from "lucide-react";
 import type { AdminAnnouncement } from "@/lib/system-settings";
+import { normalizePackageName } from "@/lib/access/package-access";
 
 const DISMISSED_KEY = "medasi_dismissed_announcements";
 
@@ -50,9 +51,29 @@ const typeConfig = {
 
 interface Props {
   announcements: AdminAnnouncement[];
+  userRole?: string | null;
+  packageName?: string | null;
 }
 
-export function AnnouncementBanner({ announcements }: Props) {
+function matchesAnnouncementTarget(
+  announcement: AdminAnnouncement,
+  userRole?: string | null,
+  packageName?: string | null,
+) {
+  if (announcement.target === "all") return true;
+  if (announcement.target === "admin") {
+    return userRole === "admin" || userRole === "org_admin";
+  }
+
+  const tier = normalizePackageName(packageName);
+  const isProTier = tier === "pro" || tier === "kurumsal";
+
+  if (announcement.target === "pro") return isProTier;
+  if (announcement.target === "student") return !isProTier;
+  return true;
+}
+
+export function AnnouncementBanner({ announcements, userRole, packageName }: Props) {
   const [visible, setVisible] = useState<AdminAnnouncement[]>([]);
 
   useEffect(() => {
@@ -63,10 +84,11 @@ export function AnnouncementBanner({ announcements }: Props) {
         if (!a.active) return false;
         if (dismissed.includes(a.id)) return false;
         if (a.expiresAt && new Date(a.expiresAt) < now) return false;
+        if (!matchesAnnouncementTarget(a, userRole, packageName)) return false;
         return true;
       }),
     );
-  }, [announcements]);
+  }, [announcements, packageName, userRole]);
 
   function dismiss(id: string) {
     addDismissed(id);
