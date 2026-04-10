@@ -8,7 +8,15 @@ import toast from "react-hot-toast";
 import { clearAdminLogs, getAdminLogs } from "@/lib/actions/settings";
 
 type LogLevel = "info" | "warn" | "error" | "success";
-type LogCategory = "auth" | "user" | "ai" | "system" | "payment";
+type LogCategory =
+  | "auth"
+  | "user"
+  | "ai"
+  | "system"
+  | "payment"
+  | "billing"
+  | "admin"
+  | "materials";
 type DateRange = "today" | "7d" | "30d" | "all";
 
 interface LogEntry {
@@ -37,7 +45,22 @@ const CATEGORY_LABELS: Record<LogCategory, string> = {
   ai: "AI",
   system: "Sistem",
   payment: "Ödeme",
+  billing: "Faturalama",
+  admin: "Admin",
+  materials: "Materyaller",
 };
+
+const CATEGORY_OPTIONS: Array<LogCategory | "all"> = [
+  "all",
+  "auth",
+  "user",
+  "ai",
+  "system",
+  "payment",
+  "billing",
+  "admin",
+  "materials",
+];
 
 function formatTimestamp(iso: string): string {
   try {
@@ -237,8 +260,7 @@ export default function LogsPage() {
       >
         <div className="flex flex-wrap gap-2 items-center">
           <div className="flex items-center gap-1.5 flex-wrap">
-            {(["all", "auth", "user", "ai", "system", "payment"] as const).map(
-              (cat) => (
+            {CATEGORY_OPTIONS.map((cat) => (
                 <button
                   key={cat}
                   onClick={() => setCategoryFilter(cat)}
@@ -260,8 +282,7 @@ export default function LogsPage() {
                 >
                   {cat === "all" ? "Tümü" : CATEGORY_LABELS[cat]}
                 </button>
-              ),
-            )}
+              ))}
           </div>
 
           <div
