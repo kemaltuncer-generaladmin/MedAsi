@@ -1,4 +1,6 @@
 /** @type {import('next').NextConfig} */
+const devApiProxyTarget = process.env.DEV_API_PROXY_TARGET?.trim().replace(/\/$/, "");
+
 const nextConfig = {
   reactStrictMode: true,
   compress: true,
@@ -37,6 +39,20 @@ const nextConfig = {
     ];
   },
 
+  async rewrites() {
+    if (process.env.NODE_ENV !== "development" || !devApiProxyTarget) return [];
+    return {
+      beforeFiles: [
+        {
+          source: "/api/:path*",
+          destination: `${devApiProxyTarget}/api/:path*`,
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
+
   // ─── Security & performance headers ──────────────────────────────────────
   async headers() {
     return [
@@ -64,11 +80,11 @@ const nextConfig = {
             key: "Content-Security-Policy",
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.googletagmanager.com https://www.google-analytics.com https://ssl.google-analytics.com",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob: https:",
-              "connect-src 'self' https://*.supabase.co https://generativelanguage.googleapis.com wss://*.supabase.co",
+              "connect-src 'self' https://medasi.com.tr https://www.medasi.com.tr https://*.supabase.co https://generativelanguage.googleapis.com https://www.google-analytics.com https://region1.google-analytics.com https://www.googletagmanager.com wss://*.supabase.co",
               "frame-ancestors 'self'",
             ].join("; "),
           },
