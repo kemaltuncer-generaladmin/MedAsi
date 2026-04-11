@@ -10,3 +10,9 @@ node_modules
 *.bak
 repomix-output.xml
 .env*.local
+
+# Service account keys — NEVER commit
+servis.json
+servis*.json
+*.serviceaccount.json
+*-credentials.json
