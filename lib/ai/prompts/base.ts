@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { formatSharedAiMemory } from "@/lib/ai/personalization";
 
 interface AiPrefs {
   model?: "FAST" | "EFFICIENT";
@@ -92,6 +93,7 @@ export function buildBasePromptFromSnapshot(
   const studyLevel = humanizeStudyLevel(prefs?.studyLevel as string | undefined);
   const aiPrefs = (prefs?.aiPrefs as AiPrefs | null) ?? {};
   const osceProfile = (prefs?.osceProfile as OsceProfile | null) ?? null;
+  const aiMemorySummary = formatSharedAiMemory(prefs?.aiMemory);
   const learningStyle = humanizeLearningStyle(prefs, aiPrefs);
   const primaryGoal = goals[0]?.trim() || "Genel Tıbbi Gelişim";
   const goalSummary = buildGoalSummary(goals);
@@ -177,6 +179,7 @@ KARŞINDAKİ KULLANICI ("Çevresel Beyin" Profili):
 - Hedefleri: ${goals.length > 0 ? goals.join(", ") : "Genel Tıbbi Gelişim"}
 - AI İletişim Tercihi: ${communicationStyle}
 ${osceSection}
+${aiMemorySummary ? `\n[PAYLAŞILAN AI HAFIZASI]\n${aiMemorySummary}` : ""}
 KESİN KURALLAR:
 1. TIP ETİĞİ: Gerçek bir hastayı tedavi ediyormuş gibi kesin tanı koyamazsın. Karar her zaman hekime aittir.
 2. EKSİK VERİ UYARISI: Eğer kullanıcının girdiği veri tıbbi bir çıkarım yapmak için yetersizse (örn: sadece "baş ağrısı" yazılmışsa, yaş/cinsiyet/süre yoksa), KESİNLİKLE uydurma. Kullanıcıyı eksik veriler konusunda uyar ve detay iste.

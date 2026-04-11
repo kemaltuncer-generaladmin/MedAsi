@@ -27,6 +27,11 @@ export async function GET(req: Request) {
   const page = Math.max(0, parseInt(url.searchParams.get("page") ?? "0"));
   const limit = Math.min(100, parseInt(url.searchParams.get("limit") ?? "30"));
 
+  const purchasesEnabled = process.env.WALLET_PURCHASES_ENABLED === "true";
+  const clientPurchasesEnabled =
+    process.env.NEXT_PUBLIC_WALLET_CLIENT_PURCHASE_ENABLED === "true";
+  const clientCheckoutReady = process.env.WALLET_CLIENT_CHECKOUT_READY === "true";
+
   const [stats, transactions, packages] = await Promise.all([
     getWalletStats(user.id),
     getTransactionHistory(user.id, limit, page * limit),
@@ -35,9 +40,7 @@ export async function GET(req: Request) {
 
   // BigInt JSON'a doğrudan serialize edilemiyor — stringe çevir
   return NextResponse.json({
-    purchaseEnabled:
-      process.env.WALLET_PURCHASES_ENABLED === "true" &&
-      process.env.NEXT_PUBLIC_WALLET_CLIENT_PURCHASE_ENABLED === "true",
+    purchaseEnabled: purchasesEnabled && clientPurchasesEnabled && clientCheckoutReady,
     wallet: {
       balance: stats.balance.toString(),
       totalEarned: stats.totalEarned.toString(),

@@ -10,9 +10,9 @@ interface CardProps {
 }
 
 const variantClass: Record<Variant, string> = {
-  default: "bg-[var(--color-surface)]",
-  elevated: "bg-[var(--color-surface-elevated)] shadow-md",
-  bordered: "bg-[var(--color-surface)] border border-[var(--color-border)]",
+  default: "glass-panel",
+  elevated: "glass-panel bg-[var(--color-surface-elevated)]",
+  bordered: "glass-panel",
 };
 
 export function Card({
@@ -24,7 +24,7 @@ export function Card({
   return (
     <div
       style={style}
-      className={["rounded-lg p-6", variantClass[variant], className].join(" ")}
+      className={["rounded-3xl p-6", variantClass[variant], className].join(" ")}
     >
       {children}
     </div>

@@ -22,10 +22,10 @@ import { PACKAGE_SELECTION_OPTIONS, SENIORITY_OPTIONS } from "@/lib/schemas/auth
 
 type Tab = "register";
 const PACKAGE_LABELS: Record<(typeof PACKAGE_SELECTION_OPTIONS)[number], string> = {
-  ucretsiz: "Ücretsiz — Temel Araçlar",
-  giris: "Giriş — ₺99/ay (Sınırlı AI)",
-  pro: "Pro — ₺249/ay (Tam AI)",
-  enterprise: "Kurumsal / Grup",
+  ucretsiz: "Ücretsiz — 75K token · 150 soru/ay",
+  giris: "Giriş — ₺149/ay · 250K token · 500 soru/ay",
+  pro: "Pro — ₺399/ay · 500K token · tam erişim",
+  enterprise: "Kurumsal / Grup — özel kapsam",
 };
 
 export default function WelcomePage() {
@@ -33,7 +33,7 @@ export default function WelcomePage() {
 
   return (
     <div className="w-full space-y-6">
-      <div className="flex rounded-[4px] border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
+      <div className="flex rounded border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">
         <button
           className="flex-1 py-2.5 text-sm font-medium transition-all duration-150 bg-[var(--color-primary)] text-black"
         >
@@ -112,7 +112,7 @@ function LoginForm() {
               type="email"
               placeholder="dr@ornek.com"
               required
-              className="pl-10 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)]"
+              className="pl-10 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)]"
             />
           </div>
         </div>
@@ -131,7 +131,7 @@ function LoginForm() {
               type={showPw ? "text" : "password"}
               placeholder="••••••••"
               required
-              className="pl-10 pr-10 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)]"
+              className="pl-10 pr-10 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)]"
             />
             <button
               type="button"
@@ -164,7 +164,7 @@ function LoginForm() {
         <Button
           type="submit"
           disabled={pending}
-          className="w-full h-11 rounded-[4px]"
+          className="w-full h-11 rounded"
         >
           {pending ? (
             <>
@@ -286,7 +286,7 @@ function RegisterForm() {
               type="text"
               placeholder="Ad Soyad"
               required
-              className="pl-10 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)]"
+              className="pl-10 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)]"
             />
           </div>
         </div>
@@ -306,7 +306,7 @@ function RegisterForm() {
               type="email"
               placeholder="dr@ornek.com"
               required
-              className="pl-10 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)]"
+              className="pl-10 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)]"
             />
           </div>
         </div>
@@ -328,7 +328,7 @@ function RegisterForm() {
               required
               value={pw}
               onChange={(e) => setPw(e.target.value)}
-              className="pl-10 pr-10 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)]"
+              className="pl-10 pr-10 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)]"
             />
             <button
               type="button"
@@ -377,7 +377,7 @@ function RegisterForm() {
               required
               value={cpw}
               onChange={(e) => setCpw(e.target.value)}
-              className={`pl-10 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] ${!match ? "border-[#FF3B5C]" : ""}`}
+              className={`pl-10 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] ${!match ? "border-[#FF3B5C]" : ""}`}
             />
           </div>
           {!match && (
@@ -399,7 +399,7 @@ function RegisterForm() {
               name="selectedPackage"
               required
               defaultValue=""
-              className="w-full h-11 rounded-[4px] border border-[var(--color-border)] bg-[var(--color-background)] text-sm text-[var(--color-text-primary)] pl-3 pr-10 focus:outline-none focus:border-[var(--color-primary)] appearance-none"
+              className="w-full h-11 rounded border border-[var(--color-border)] bg-[var(--color-background)] text-sm text-[var(--color-text-primary)] pl-3 pr-10 focus:outline-none focus:border-[var(--color-primary)] appearance-none"
             >
               <option value="" disabled className="bg-[#070709]">
                 Paket seçin
@@ -431,7 +431,7 @@ function RegisterForm() {
               value={couponCode}
               onChange={(e) => handleCouponChange(e.target.value)}
               autoComplete="off"
-              className="pl-10 pr-9 h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] uppercase tracking-widest"
+              className="pl-10 pr-9 h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] uppercase tracking-widest"
               style={{
                 borderColor:
                   couponState?.valid === true
@@ -475,7 +475,7 @@ function RegisterForm() {
               name="seniority"
               required
               defaultValue=""
-              className="w-full h-11 rounded-[4px] border border-[var(--color-border)] bg-[var(--color-background)] text-sm text-[var(--color-text-primary)] pl-3 pr-10 focus:outline-none focus:border-[var(--color-primary)] appearance-none"
+              className="w-full h-11 rounded border border-[var(--color-border)] bg-[var(--color-background)] text-sm text-[var(--color-text-primary)] pl-3 pr-10 focus:outline-none focus:border-[var(--color-primary)] appearance-none"
             >
               <option value="" disabled className="bg-[#070709]">
                 Sınıf seçin
@@ -529,7 +529,7 @@ function RegisterForm() {
         <Button
           type="submit"
           disabled={pending || !match || !legalAccepted || !medicalDataConsentAccepted}
-          className="w-full h-11 rounded-[4px] mt-1"
+          className="w-full h-11 rounded mt-1"
         >
           {pending ? (
             <>

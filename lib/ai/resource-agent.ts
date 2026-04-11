@@ -11,7 +11,9 @@
 
 import { createClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import { getGeminiApiKey } from "@/lib/ai/env";
+import { getResolvedGeminiConfig } from "@/lib/ai/env";
+import { normalizeGeminiError } from "@/lib/ai/google-errors";
+import { shouldRetryWithAlternateGeminiKey } from "@/lib/ai/failover";
 
 function getSupabaseClient() {
   const supabaseUrl = process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -20,12 +22,6 @@ function getSupabaseClient() {
   return createClient(supabaseUrl, supabaseKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
-}
-
-function getGenAI() {
-  const apiKey = getGeminiApiKey();
-  if (!apiKey) throw new Error("GEMINI_API_KEY eksik.");
-  return new GoogleGenerativeAI(apiKey);
 }
 
 export interface RagDocument {
@@ -40,10 +36,28 @@ export interface RagDocument {
 
 // ─── Embedding oluştur ────────────────────────────────────────────────────────
 export async function createEmbedding(text: string): Promise<number[]> {
-  const genAI = getGenAI();
-  const model = genAI.getGenerativeModel({ model: "text-embedding-004" });
-  const result = await model.embedContent(text.slice(0, 2000));
-  return result.embedding.values;
+  const run = async (keyPreference: "server-first" | "module-first") => {
+    const resolved = getResolvedGeminiConfig("embeddings", { keyPreference });
+    if (!resolved.apiKey) throw new Error("GEMINI_KEY_EMBEDDINGS eksik.");
+    const model = new GoogleGenerativeAI(resolved.apiKey).getGenerativeModel({
+      model: "text-embedding-004",
+    });
+    const result = await model.embedContent(text.slice(0, 2000));
+    return result.embedding.values;
+  };
+
+  try {
+    return await run("server-first");
+  } catch (error) {
+    if (!shouldRetryWithAlternateGeminiKey(error)) {
+      throw normalizeGeminiError(error);
+    }
+    try {
+      return await run("module-first");
+    } catch {
+      throw normalizeGeminiError(error);
+    }
+  }
 }
 
 // ─── Hibrit RAG: kullanıcı materyalleri + global kütüphane ───────────────────

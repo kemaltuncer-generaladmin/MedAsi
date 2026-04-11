@@ -18,3 +18,14 @@ export type {
   AIChatRequest,
   AIChatResponse,
 } from "./api";
+export type {
+  WrongQuestionEntry,
+  FlashcardCard,
+  FlashcardDeck,
+  StudyPlan,
+  MaterialSlideInsight,
+  MaterialQualityReport,
+  StudyRecommendation,
+  StudyWorkspace,
+  StudyQuestionDifficulty,
+} from "./study";

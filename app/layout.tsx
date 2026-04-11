@@ -2,7 +2,21 @@ import "./globals.css";
 import { Toaster } from "react-hot-toast";
 import type { Metadata } from "next";
 import Script from "next/script";
+import { IBM_Plex_Mono, Plus_Jakarta_Sans } from "next/font/google";
 import { themeBootScript } from "@/lib/theme";
+
+const plusJakartaSans = Plus_Jakarta_Sans({
+  subsets: ["latin"],
+  variable: "--font-sans",
+  display: "swap",
+});
+
+const ibmPlexMono = IBM_Plex_Mono({
+  subsets: ["latin"],
+  variable: "--font-mono",
+  display: "swap",
+  weight: ["400", "500", "600"],
+});
 
 export const metadata: Metadata = {
   title: "Medasi — Tıp Eğitiminde Yapay Zeka",
@@ -39,7 +53,9 @@ export default function RootLayout({
           `}
         </Script>
       </head>
-      <body className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] antialiased">
+      <body
+        className={`${plusJakartaSans.variable} ${ibmPlexMono.variable} min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)] antialiased`}
+      >
         <Script id="medasi-theme-boot" strategy="beforeInteractive">
           {themeBootScript}
         </Script>

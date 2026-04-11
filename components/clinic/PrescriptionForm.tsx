@@ -28,7 +28,7 @@ export function PrescriptionForm({
     formState: { isSubmitting },
     reset,
   } = useForm<PrescriptionInput>({
-    resolver: zodResolver(prescriptionSchema) as any,
+    resolver: zodResolver(prescriptionSchema),
     defaultValues: {
       patientId,
       medications: [{ name: "", dosage: "", frequency: "", duration: "" }],

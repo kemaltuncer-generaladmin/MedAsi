@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
+import { upsertUserAcademicProfile } from "@/lib/community/service";
 
 type AiModel = "FAST" | "EFFICIENT";
 type AiLanguage = "tr" | "en" | "auto";
@@ -54,12 +55,36 @@ function responseFromUser(user: {
   email: string;
   goals: Prisma.JsonValue;
   notificationPrefs: Prisma.JsonValue;
+  academicProfile?: {
+    universityId: string | null;
+    programId: string | null;
+    termId: string | null;
+    specialty: string | null;
+    verificationStatus: string;
+    visibilityLevel: string;
+    university?: { name: string } | null;
+    program?: { name: string } | null;
+    term?: { name: string } | null;
+  } | null;
 }) {
   return {
     name: user.name ?? "",
     email: user.email,
     goals: user.goals,
     notificationPrefs: user.notificationPrefs,
+    academicProfile: user.academicProfile
+      ? {
+          universityId: user.academicProfile.universityId,
+          programId: user.academicProfile.programId,
+          termId: user.academicProfile.termId,
+          specialty: user.academicProfile.specialty,
+          verificationStatus: user.academicProfile.verificationStatus,
+          visibilityLevel: user.academicProfile.visibilityLevel,
+          universityName: user.academicProfile.university?.name ?? null,
+          programName: user.academicProfile.program?.name ?? null,
+          termName: user.academicProfile.term?.name ?? null,
+        }
+      : null,
   };
 }
 
@@ -95,6 +120,13 @@ export async function GET() {
       email: true,
       goals: true,
       notificationPrefs: true,
+      academicProfile: {
+        include: {
+          university: { select: { name: true } },
+          program: { select: { name: true } },
+          term: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -135,6 +167,13 @@ export async function PUT(request: NextRequest) {
       email: true,
       goals: true,
       notificationPrefs: true,
+      academicProfile: {
+        include: {
+          university: { select: { name: true } },
+          program: { select: { name: true } },
+          term: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -178,6 +217,12 @@ export async function PUT(request: NextRequest) {
 
   const specialty = readNullableText(profileSource.specialty);
   if (specialty !== undefined) profilePatch.specialty = specialty;
+
+  const universityId = readNullableText(profileSource.universityId);
+  const programId = readNullableText(profileSource.programId);
+  const termId = readNullableText(profileSource.termId);
+  const visibilityLevel = readNullableText(profileSource.visibilityLevel);
+  const studentNoHash = readNullableText(profileSource.studentNoHash);
 
   const notificationPatch: Record<string, unknown> = {};
 
@@ -251,6 +296,52 @@ export async function PUT(request: NextRequest) {
       email: true,
       goals: true,
       notificationPrefs: true,
+      academicProfile: {
+        include: {
+          university: { select: { name: true } },
+          program: { select: { name: true } },
+          term: { select: { name: true } },
+        },
+      },
+    },
+  });
+
+  if (
+    universityId !== undefined ||
+    programId !== undefined ||
+    termId !== undefined ||
+    specialty !== undefined ||
+    studentNoHash !== undefined ||
+    visibilityLevel !== undefined
+  ) {
+    await upsertUserAcademicProfile(user.id, {
+      universityId: universityId === undefined ? updatedUser.academicProfile?.universityId : universityId,
+      programId: programId === undefined ? updatedUser.academicProfile?.programId : programId,
+      termId: termId === undefined ? updatedUser.academicProfile?.termId : termId,
+      specialty: specialty === undefined ? updatedUser.academicProfile?.specialty : specialty,
+      studentNoHash:
+        studentNoHash === undefined ? updatedUser.academicProfile?.studentNoHash ?? null : studentNoHash,
+      visibilityLevel:
+        visibilityLevel === undefined
+          ? updatedUser.academicProfile?.visibilityLevel ?? "verified_only"
+          : visibilityLevel,
+    });
+  }
+
+  const finalUser = await prisma.user.findUnique({
+    where: { id: user.id },
+    select: {
+      name: true,
+      email: true,
+      goals: true,
+      notificationPrefs: true,
+      academicProfile: {
+        include: {
+          university: { select: { name: true } },
+          program: { select: { name: true } },
+          term: { select: { name: true } },
+        },
+      },
     },
   });
 
@@ -264,5 +355,5 @@ export async function PUT(request: NextRequest) {
     }
   }
 
-  return NextResponse.json(responseFromUser(updatedUser));
+  return NextResponse.json(responseFromUser(finalUser ?? updatedUser));
 }

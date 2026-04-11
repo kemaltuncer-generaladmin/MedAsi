@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { MedicalAmbientDecor } from "@/components/layout/MedicalAmbientDecor";
 
 const stats = [
   { value: "400.000+", label: "Simülasyon" },
@@ -8,9 +9,10 @@ const stats = [
 
 export default function AuthLayout({ children }: { children: ReactNode }) {
   return (
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-text-primary)]">
+    <div className="relative min-h-screen overflow-hidden bg-[var(--color-background)] text-[var(--color-text-primary)]">
+      <MedicalAmbientDecor variant="auth" />
       <div className="grid min-h-screen lg:grid-cols-[55fr_45fr]">
-        <aside className="relative hidden overflow-hidden lg:flex">
+        <aside className="relative z-10 hidden overflow-hidden lg:flex">
           <div className="absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(0,229,255,0.18),transparent_35%),radial-gradient(circle_at_80%_70%,rgba(20,0,166,0.28),transparent_40%),linear-gradient(135deg,#08080d_0%,#0b0b12_45%,#10101b_100%)]" />
           <div className="absolute inset-0 auth-pulse opacity-50" />
           <div className="relative z-10 flex h-full w-full flex-col justify-between p-10">
@@ -54,7 +56,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
           </div>
         </aside>
 
-        <section className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-5 py-10 sm:px-8">
+        <section className="relative z-10 flex min-h-screen items-center justify-center bg-[var(--color-background)]/90 px-5 py-10 sm:px-8 backdrop-blur-[2px]">
           <div className="w-full max-w-md">{children}</div>
         </section>
       </div>

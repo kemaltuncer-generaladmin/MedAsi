@@ -2,11 +2,12 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import {
   getGDriveAuthUrl,
-  isDriveConfigured,
-  hasDriveConnection,
+  getDriveConfigStatus,
+  getDriveConnectionStatus,
   revokeDriveConnection,
   createGDriveState,
 } from "@/lib/gdrive/client";
+import { getDriveConfigMissingMessage } from "@/lib/gdrive/config";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,19 @@ export async function GET(req: Request) {
   const { data: { user }, error } = await supabase.auth.getUser();
   if (error || !user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  if (!isDriveConfigured()) {
+  const config = getDriveConfigStatus({
+    requestUrl: req.url,
+    headers: req.headers,
+  });
+
+  if (!config.configured) {
     return NextResponse.json({
       configured: false,
-      message: "GOOGLE_DRIVE_CLIENT_ID ve GOOGLE_DRIVE_CLIENT_SECRET ayarlanmamış.",
+      connected: false,
+      reauthRequired: false,
+      missingConfig: config.missingConfig,
+      missingConfigDetails: config.missingConfigDetails,
+      message: getDriveConfigMissingMessage(config.missingConfig),
     });
   }
 
@@ -27,14 +37,32 @@ export async function GET(req: Request) {
   const action = url.searchParams.get("action");
 
   if (action === "status") {
-    const connected = await hasDriveConnection(user.id);
-    return NextResponse.json({ configured: true, connected });
+    const status = await getDriveConnectionStatus(user.id);
+    const message = !config.configured
+      ? "Google Drive OAuth yapılandırması eksik."
+      : status.reauthRequired
+        ? "Drive oturumu yenilenmeli. Devam etmek için bağlantıyı tekrar kurun."
+        : status.connected
+          ? "Drive hesabı bağlı. Dosya seçerek içe aktarabilirsiniz."
+          : "Drive hesabı bağlı değil. İçeri aktarmak için önce bağlanın.";
+    return NextResponse.json({
+      configured: true,
+      ...status,
+      missingConfig: [],
+      missingConfigDetails: [],
+      baseUrl: config.baseUrl,
+      redirectUri: config.redirectUri,
+      message,
+    });
   }
 
   if (action === "connect") {
     const state = createGDriveState(user.id);
-    const authUrl = getGDriveAuthUrl(state);
-    return NextResponse.json({ authUrl });
+    const authUrl = getGDriveAuthUrl(state, {
+      requestUrl: req.url,
+      headers: req.headers,
+    });
+    return NextResponse.json({ authUrl, configured: true, missingConfig: [], missingConfigDetails: [] });
   }
 
   return NextResponse.json({ error: "action parametresi gerekli (status|connect)" }, { status: 400 });

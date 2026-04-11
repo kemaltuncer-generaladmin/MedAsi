@@ -92,13 +92,47 @@ export default function HataliSorularPage() {
   });
 
   useEffect(() => {
-    const raw = localStorage.getItem(WRONG_KEY);
-    if (raw) setWrongs(JSON.parse(raw));
+    let active = true;
+
+    fetch("/api/study/wrong-questions", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then(async (data) => {
+        if (!active) return;
+        const items = Array.isArray(data?.items) ? data.items : [];
+        if (items.length > 0) {
+          setWrongs(items);
+          return;
+        }
+
+        const raw = localStorage.getItem(WRONG_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        setWrongs(parsed);
+        await fetch("/api/study/wrong-questions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ items: parsed }),
+        }).catch(() => {});
+      })
+      .catch(() => {
+        if (!active) return;
+        const raw = localStorage.getItem(WRONG_KEY);
+        if (raw) setWrongs(JSON.parse(raw));
+      });
+
+    return () => {
+      active = false;
+    };
   }, []);
 
   const saveWrongs = useCallback((ws: WrongAnswer[]) => {
     setWrongs(ws);
     localStorage.setItem(WRONG_KEY, JSON.stringify(ws));
+    void fetch("/api/study/wrong-questions", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ items: ws }),
+    }).catch(() => {});
   }, []);
 
   const activeWrongs = wrongs.filter((w) => !w.learned);
@@ -124,15 +158,28 @@ export default function HataliSorularPage() {
 
   function markLearned(id: string) {
     saveWrongs(wrongs.map((w) => (w.id === id ? { ...w, learned: true } : w)));
+    void fetch("/api/study/wrong-questions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, learned: true }),
+    }).catch(() => {});
     toast.success("Öğrenildi olarak işaretlendi!");
   }
 
   function unmarkLearned(id: string) {
     saveWrongs(wrongs.map((w) => (w.id === id ? { ...w, learned: false } : w)));
+    void fetch("/api/study/wrong-questions", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, learned: false }),
+    }).catch(() => {});
   }
 
   function deleteWrong(id: string) {
     saveWrongs(wrongs.filter((w) => w.id !== id));
+    void fetch(`/api/study/wrong-questions?id=${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }).catch(() => {});
     toast.success("Soru silindi.");
   }
 

@@ -9,7 +9,9 @@ import { prisma } from "@/lib/prisma";
 import { getSystemSettingsFromDb } from "@/lib/system-settings";
 import { createSystemLog } from "@/lib/system-log";
 import { checkAndLogAiUsage, logAIUsage } from "@/lib/ai/check-limit";
+import { getAiRefusalMessage } from "@/lib/ai/access";
 import { recordAiUsageTelemetry } from "@/lib/ai/telemetry";
+import { canAccessModule } from "@/lib/access/entitlements";
 import {
   AI_LIMITS,
   sanitizeContextText,
@@ -20,6 +22,14 @@ import {
   createCentralAiRuntime,
   type AiModelType,
 } from "@/lib/ai/orchestrator";
+import { resolveAiModule } from "@/lib/ai/module-registry";
+import { withCentralAiRuntimeFailover } from "@/lib/ai/failover";
+import { rememberUserSignals } from "@/lib/ai/personalization";
+import {
+  geminiErrorToResponsePayload,
+  isGeminiErrorLike,
+} from "@/lib/ai/google-errors";
+import { maskGeminiEnvName } from "@/lib/ai/env";
 
 const AI_STREAM_TIMEOUT_MS = 60_000;
 const AI_STREAM_CHUNK_TIMEOUT_MS = 15_000;
@@ -42,23 +52,6 @@ type UserSnapshot = {
 } | null;
 
 type LimitResult = Awaited<ReturnType<typeof checkAndLogAiUsage>>;
-
-function getAiRefusalMessage(reason: string): string {
-  switch (reason) {
-    case "limit_exceeded":
-      return "AI kullanım limitiniz doldu. Paket kotanız şu anda yeterli değil.";
-    case "no_package":
-      return "Bu hesap için aktif bir paket bulunmuyor.";
-    case "org_inactive":
-      return "Bağlı olduğunuz organizasyon aktif değil veya süresi dolmuş.";
-    case "budget_exceeded":
-      return "Kurumsal AI bütçesi doldu.";
-    case "insufficient_tokens":
-      return "Yeterli token bakiyeniz yok.";
-    default:
-      return "AI isteği şu anda işlenemiyor.";
-  }
-}
 
 function isErrorLike(error: unknown): error is Error | DOMException {
   return error instanceof Error || error instanceof DOMException;
@@ -111,6 +104,7 @@ function normalizeRequestedMaxOutputTokens(value: unknown): number | undefined {
 async function persistAiTelemetry(params: {
   userId: string;
   modelId: string;
+  keyName?: string | null;
   moduleName?: string;
   limitResult: LimitResult;
   source?: "generateText" | "streamText";
@@ -133,6 +127,7 @@ async function persistAiTelemetry(params: {
       userId: params.userId,
       route: "/api/ai/chat",
       model: params.modelId,
+      keyName: params.keyName,
       inputTokens,
       outputTokens,
       module: params.moduleName,
@@ -234,8 +229,26 @@ export async function POST(req: NextRequest) {
 
     const body = await req.json();
     const message = sanitizeUserMessage(body.message);
-    const moduleName =
+    const requestedModuleName =
       typeof body.module === "string" && body.module.trim() ? body.module.trim() : undefined;
+    const moduleResolution = resolveAiModule(requestedModuleName);
+    const moduleName = moduleResolution.canonicalModuleId;
+    const requiredModule = moduleResolution.config.accessModule;
+    if (moduleResolution.usedFallback && moduleResolution.requestedModuleId) {
+      await createSystemLog({
+        level: "warn",
+        category: "ai",
+        message: "Bilinmeyen AI modülü fallback ile çözüldü",
+        details: `requested=${moduleResolution.requestedModuleId} | canonical=${moduleName}`,
+        userId: user.id,
+      }).catch(() => {});
+    }
+    if (requiredModule && !(await canAccessModule(user.id, requiredModule))) {
+      return NextResponse.json(
+        { error: getAiRefusalMessage("package_blocked"), reason: "package_blocked" },
+        { status: 403 },
+      );
+    }
     const modelTypeFromReq = normalizeRequestedModel(body.model);
     const requestedMaxOutputTokens = normalizeRequestedMaxOutputTokens(body.maxOutputTokens);
     const shouldStream = body.stream === true || body.stream === "true";
@@ -250,6 +263,7 @@ export async function POST(req: NextRequest) {
       userSnapshotPromise.then(async (snapshot) =>
         getEnhancedContext(message, user.id, {
           profile: snapshot?.learningProfile ?? null,
+          notificationPrefs: (snapshot?.notificationPrefs as Record<string, unknown> | null) ?? null,
         }),
       ),
       userSnapshotPromise.then((snapshot) => buildBasePromptFromSnapshot(snapshot)),
@@ -266,6 +280,7 @@ export async function POST(req: NextRequest) {
       requestedModel: modelTypeFromReq,
       requestedMaxOutputTokens,
       userPrefs: userAiPrefs ?? undefined,
+      keyPreference: "server-first",
     });
     if (!aiRuntime.settings.globalEnabled) {
       return NextResponse.json(
@@ -304,11 +319,18 @@ export async function POST(req: NextRequest) {
       await persistAiTelemetry({
         userId: user.id,
         modelId: aiRuntime.modelId,
-        moduleName,
+        keyName: aiRuntime.keyName,
+        moduleName: aiRuntime.moduleId,
         limitResult,
         source: "generateText",
         usage: Promise.resolve(result.usage),
       });
+      void rememberUserSignals({
+        userId: user.id,
+        moduleName: aiRuntime.moduleId,
+        userMessage: message,
+        assistantText: result.text,
+      }).catch(() => {});
 
       return NextResponse.json({
         response: { text: result.text },
@@ -317,6 +339,12 @@ export async function POST(req: NextRequest) {
     }
 
     if (shouldStream) {
+      void rememberUserSignals({
+        userId: user.id,
+        moduleName: aiRuntime.moduleId,
+        userMessage: message,
+      }).catch(() => {});
+
       const result = streamText({
         ...generationOptions,
         timeout: {
@@ -325,11 +353,17 @@ export async function POST(req: NextRequest) {
         },
         onError: (error) => {
           if (isAbortLikeError(error) || isTimeoutLikeError(error)) return;
+          const geminiReason = isGeminiErrorLike(error)
+            ? geminiErrorToResponsePayload(error).reason
+            : "upstream_error";
           void createSystemLog({
             level: "error",
             category: "ai",
             message: "AI stream hatası",
-            details: getErrorMessage(error),
+            details:
+              `module=${aiRuntime.moduleId} | model=${aiRuntime.modelId} | ` +
+              `key=${maskGeminiEnvName(aiRuntime.keyName)} (${aiRuntime.keySource ?? "unknown"}) | ` +
+              `reason=${geminiReason} | error=${getErrorMessage(error)}`,
             userId: user.id,
           }).catch(() => {});
         },
@@ -346,7 +380,8 @@ export async function POST(req: NextRequest) {
           void persistAiTelemetry({
             userId: user.id,
             modelId: aiRuntime.modelId,
-            moduleName,
+            keyName: aiRuntime.keyName,
+            moduleName: aiRuntime.moduleId,
             limitResult,
             source: "streamText",
             usage: Promise.resolve(usage),
@@ -362,26 +397,72 @@ export async function POST(req: NextRequest) {
     }
 
     // Non-streaming
-    const result = await generateText({
-      ...generationOptions,
-      timeout: AI_TEXT_TIMEOUT_MS,
-    });
+    const runtimeResult = await withCentralAiRuntimeFailover(
+      {
+        moduleName,
+        requestedModel: modelTypeFromReq,
+        requestedMaxOutputTokens,
+        userPrefs: userAiPrefs ?? undefined,
+      },
+      async (runtime) =>
+        generateText({
+          ...generationOptions,
+          model: runtime.model,
+          temperature: runtime.temperature,
+          maxOutputTokens: runtime.maxOutputTokens,
+          timeout: AI_TEXT_TIMEOUT_MS,
+        }),
+    );
+    if (runtimeResult.retried) {
+      await createSystemLog({
+        level: "warn",
+        category: "ai",
+        message: "AI key failover uygulandı",
+        details:
+          `module=${moduleName} | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+          `activeKey=${maskGeminiEnvName(runtimeResult.runtime.keyName)} (${runtimeResult.runtime.keySource ?? "unknown"})`,
+        userId: user.id,
+      }).catch(() => {});
+    }
+    const runtimeUsed = runtimeResult.runtime;
+    const result = runtimeResult.value;
 
     await persistAiTelemetry({
       userId: user.id,
-      modelId: aiRuntime.modelId,
-      moduleName,
+      modelId: runtimeUsed.modelId,
+      keyName: runtimeUsed.keyName,
+      moduleName: runtimeUsed.moduleId,
       limitResult,
       source: "generateText",
       usage: Promise.resolve(result.usage),
     });
+    void rememberUserSignals({
+      userId: user.id,
+      moduleName: aiRuntime.moduleId,
+      userMessage: message,
+      assistantText: result.text,
+    }).catch(() => {});
 
     return NextResponse.json({
       response: { text: result.text },
-      model: aiRuntime.modelId,
+      model: runtimeUsed.modelId,
     });
   } catch (error) {
     console.error("AI Chat Hatası:", error);
+
+    if (isGeminiErrorLike(error)) {
+      const geminiError = geminiErrorToResponsePayload(error);
+      await createSystemLog({
+        level: "error",
+        category: "ai",
+        message: `Gemini hatası (${geminiError.reason})`,
+        details: `module=chat | reason=${geminiError.reason} | error=${geminiError.message}`,
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: geminiError.message, reason: geminiError.reason },
+        { status: geminiError.status },
+      );
+    }
 
     const status = isTimeoutLikeError(error) ? 504 : isAbortLikeError(error) ? 499 : 500;
     const message = isTimeoutLikeError(error)

@@ -66,26 +66,19 @@ async function initializeSystem() {
 
   const canonicalPackages = new Map<string, string>();
   for (const policy of CANONICAL_PACKAGE_POLICIES) {
-    const tokenGrant =
-      policy.tier === "ucretsiz"
-        ? 100_000n
-        : policy.tier === "giris"
-          ? 300_000n
-          : policy.tier === "pro"
-            ? 500_000n
-            : 1_000_000n;
+    const tokenGrant = BigInt(policy.initialTokenGrant);
 
     const pkg = await prisma.package.upsert({
-      where: { name: policy.name },
+      where: { name: policy.displayName },
       update: {
-        dailyAiLimit: policy.dailyAiLimit,
-        price: policy.monthlyPriceTry,
+        dailyAiLimit: policy.aiLimits.minBalanceToStart,
+        price: policy.monthlyPrice,
         tokenGrant,
       },
       create: {
-        name: policy.name,
-        dailyAiLimit: policy.dailyAiLimit,
-        price: policy.monthlyPriceTry,
+        name: policy.displayName,
+        dailyAiLimit: policy.aiLimits.minBalanceToStart,
+        price: policy.monthlyPrice,
         tokenGrant,
       },
       select: { id: true, name: true },
@@ -100,7 +93,7 @@ async function initializeSystem() {
 
   for (const legacyPkg of legacyPackages) {
     const targetTier = normalizePackageTier(legacyPkg.name);
-    const targetName = getPackagePolicyByTier(targetTier).name;
+    const targetName = getPackagePolicyByTier(targetTier).displayName;
     const targetPackageId = canonicalPackages.get(targetName);
     if (!targetPackageId) continue;
 
@@ -139,9 +132,9 @@ async function initializeSystem() {
       data: [
         {
           name: "Başlangıç Paketi",
-          tokens: 100_000n,
+          tokens: 75_000n,
           bonusPct: 0,
-          priceTry: 79,
+          priceTry: 59,
           priceUsd: 2.5,
           isActive: true,
           isPopular: false,
@@ -149,9 +142,9 @@ async function initializeSystem() {
         },
         {
           name: "Standart Paket",
-          tokens: 300_000n,
+          tokens: 250_000n,
           bonusPct: 10,
-          priceTry: 199,
+          priceTry: 179,
           priceUsd: 6.5,
           isActive: true,
           isPopular: true,

@@ -10,9 +10,18 @@ import {
   sanitizeUserMessage,
 } from "@/lib/ai/limits";
 import { appendCentralSystemPrompt, createCentralAiRuntime } from "@/lib/ai/orchestrator";
+import { withCentralAiRuntimeFailover } from "@/lib/ai/failover";
 import { recordAiUsageTelemetry } from "@/lib/ai/telemetry";
+import { canAccessModule } from "@/lib/access/entitlements";
+import { geminiErrorToResponsePayload, isGeminiErrorLike } from "@/lib/ai/google-errors";
+import { ensureMaterialsSchema } from "@/lib/db/schema-guard";
+import { rememberUserSignals } from "@/lib/ai/personalization";
+import { createSystemLog } from "@/lib/system-log";
+import { maskGeminiEnvName } from "@/lib/ai/env";
+import { getAiRefusalMessage } from "@/lib/ai/access";
 
 export async function POST(req: NextRequest) {
+  let userIdForLog: string | undefined;
   try {
     const supabase = await createClient();
     const {
@@ -23,11 +32,19 @@ export async function POST(req: NextRequest) {
     if (authError || !user) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    userIdForLog = user.id;
+
+    if (!(await canAccessModule(user.id, "ai-assistant"))) {
+      return NextResponse.json(
+        { error: getAiRefusalMessage("package_blocked"), reason: "package_blocked" },
+        { status: 403 },
+      );
+    }
 
     const limitResult = await checkAndLogAiUsage();
     if (!limitResult.canProceed) {
       return NextResponse.json(
-        { error: "AI kullanım limitiniz doldu veya aktif paketiniz yok." },
+        { error: getAiRefusalMessage(limitResult.reason), reason: limitResult.reason },
         { status: 403 },
       );
     }
@@ -59,6 +76,7 @@ export async function POST(req: NextRequest) {
     // RAG: seçili materyal chunk'larını çek
     let ragContext = "";
     if (materialIds.length > 0) {
+      await ensureMaterialsSchema();
       // Kullanıcıya ait ve seçili materiallerin chunk'larını çek
       const chunks = await prisma.$queryRaw<{ content: string }[]>`
         SELECT content
@@ -96,33 +114,75 @@ Türkçe yanıt ver. Açık, kısa ve öğrenci dostu ol.`),
       ? `${conversationContext}\nKullanıcı: ${message}`
       : message;
 
-    const { text, usage } = await generateText({
-      model: aiRuntime.model,
-      system: systemPrompt,
-      prompt: fullMessage,
-      temperature: aiRuntime.temperature,
-      maxOutputTokens: aiRuntime.maxOutputTokens,
-    });
+    const runtimeResult = await withCentralAiRuntimeFailover(
+      {
+        moduleName: "akilli-asistan",
+        requestedModel: "EFFICIENT",
+        requestedMaxOutputTokens: 512,
+      },
+      async (runtime) =>
+        generateText({
+          model: runtime.model,
+          system: systemPrompt,
+          prompt: fullMessage,
+          temperature: runtime.temperature,
+          maxOutputTokens: runtime.maxOutputTokens,
+        }),
+    );
+    const activeRuntime = runtimeResult.runtime;
+    if (runtimeResult.retried) {
+      await createSystemLog({
+        level: "warn",
+        category: "ai",
+        message: "Akıllı Asistan key failover uygulandı",
+        details:
+          `module=akilli-asistan | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+          `key=${maskGeminiEnvName(activeRuntime.keyName)} (${activeRuntime.keySource ?? "unknown"})`,
+        userId: user.id,
+      }).catch(() => {});
+    }
+    const { text, usage } = runtimeResult.value;
 
     // Token logla
     const inputTokens = (usage as { inputTokens?: number } | undefined)?.inputTokens ?? 0;
     const outputTokens = (usage as { outputTokens?: number } | undefined)?.outputTokens ?? 0;
     const totalTokens = inputTokens + outputTokens;
-    await logAIUsage(user.id, aiRuntime.modelId, totalTokens, "akilli-asistan");
+    await logAIUsage(user.id, activeRuntime.modelId, totalTokens, "akilli-asistan");
     await recordAiUsageTelemetry({
       userId: user.id,
       route: "/api/ai/akilli-asistan",
-      model: aiRuntime.modelId,
+      model: activeRuntime.modelId,
+      keyName: activeRuntime.keyName,
       inputTokens,
       outputTokens,
       module: "akilli-asistan",
       source: "generateText",
       trackOrg: limitResult.isOrgMember,
     });
+    void rememberUserSignals({
+      userId: user.id,
+      moduleName: "akilli-asistan",
+      userMessage: message,
+      assistantText: text,
+    }).catch(() => {});
 
     return NextResponse.json({ text });
   } catch (err) {
     console.error("[akilli-asistan] Error:", err);
+    if (isGeminiErrorLike(err)) {
+      const geminiError = geminiErrorToResponsePayload(err);
+      await createSystemLog({
+        level: "error",
+        category: "ai",
+        message: `Gemini hatası (${geminiError.reason})`,
+        details: `module=akilli-asistan | reason=${geminiError.reason} | message=${geminiError.message}`,
+        userId: userIdForLog,
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: geminiError.message, reason: geminiError.reason },
+        { status: geminiError.status },
+      );
+    }
     return NextResponse.json(
       { error: err instanceof Error ? err.message : "Sunucu hatası" },
       { status: 500 },

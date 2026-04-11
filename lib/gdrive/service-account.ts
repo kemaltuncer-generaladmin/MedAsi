@@ -43,6 +43,21 @@ export type LibraryFile = {
 
 let cachedCredentials: ServiceAccountCredentials | null = null;
 let cachedDrive: drive_v3.Drive | null = null;
+let cachedResolvedRootFolderId: string | null = null;
+let handshakeCache:
+  | { value: HandshakeStatus; expiresAt: number }
+  | null = null;
+let libraryFilesCache:
+  | { value: LibraryFile[]; expiresAt: number }
+  | null = null;
+const userWorkspaceCache = new Map<
+  string,
+  { value: UserDriveWorkspace; expiresAt: number }
+>();
+const folderIdCache = new Map<string, string>();
+const HANDSHAKE_TTL_MS = 60_000;
+const LIBRARY_TTL_MS = 60_000;
+const USER_WORKSPACE_TTL_MS = 5 * 60_000;
 
 function getRootFolderId() {
   const value = (process.env.GOOGLE_DRIVE_ROOT_FOLDER_ID ?? "").trim();
@@ -122,8 +137,12 @@ async function getDriveClient(): Promise<drive_v3.Drive> {
 }
 
 async function resolveRootFolderId(): Promise<string> {
+  if (cachedResolvedRootFolderId) return cachedResolvedRootFolderId;
   const configured = getRootFolderId();
-  if (configured) return configured;
+  if (configured) {
+    cachedResolvedRootFolderId = configured;
+    return configured;
+  }
 
   const drive = await getDriveClient();
   const existing = await drive.files.list({
@@ -134,7 +153,10 @@ async function resolveRootFolderId(): Promise<string> {
     supportsAllDrives: true,
   });
   const existingId = existing.data.files?.[0]?.id;
-  if (existingId) return existingId;
+  if (existingId) {
+    cachedResolvedRootFolderId = existingId;
+    return existingId;
+  }
 
   const created = await drive.files.create({
     requestBody: {
@@ -145,16 +167,21 @@ async function resolveRootFolderId(): Promise<string> {
     supportsAllDrives: true,
   });
   if (!created.data.id) throw new Error("Medasi Root klasoru olusturulamadi.");
+  cachedResolvedRootFolderId = created.data.id;
   return created.data.id;
 }
 
 export async function getManagedDriveHandshakeStatus(): Promise<HandshakeStatus> {
+  if (handshakeCache && handshakeCache.expiresAt > Date.now()) {
+    return handshakeCache.value;
+  }
+
   const configuredRootFolderId = getRootFolderId();
   const serviceAccountFilePresent = Boolean(getServiceAccountJsonEnv() || getServiceAccountFileEnv());
   const rootFolderConfigured = Boolean(configuredRootFolderId);
 
   if (!serviceAccountFilePresent) {
-    return {
+    const status = {
       serviceAccountFilePresent,
       rootFolderConfigured: false,
       rootFolderReachable: false,
@@ -162,6 +189,8 @@ export async function getManagedDriveHandshakeStatus(): Promise<HandshakeStatus>
       serviceAccountEmail: null,
       ready: false,
     };
+    handshakeCache = { value: status, expiresAt: Date.now() + HANDSHAKE_TTL_MS };
+    return status;
   }
 
   try {
@@ -173,7 +202,7 @@ export async function getManagedDriveHandshakeStatus(): Promise<HandshakeStatus>
       fields: "id,name,mimeType",
       supportsAllDrives: true,
     });
-    return {
+    const status = {
       serviceAccountFilePresent: true,
       rootFolderConfigured: true,
       rootFolderReachable: true,
@@ -181,8 +210,10 @@ export async function getManagedDriveHandshakeStatus(): Promise<HandshakeStatus>
       serviceAccountEmail: credentials.client_email,
       ready: true,
     };
+    handshakeCache = { value: status, expiresAt: Date.now() + HANDSHAKE_TTL_MS };
+    return status;
   } catch {
-    return {
+    const status = {
       serviceAccountFilePresent: true,
       rootFolderConfigured,
       rootFolderReachable: false,
@@ -190,10 +221,16 @@ export async function getManagedDriveHandshakeStatus(): Promise<HandshakeStatus>
       serviceAccountEmail: null,
       ready: false,
     };
+    handshakeCache = { value: status, expiresAt: Date.now() + HANDSHAKE_TTL_MS };
+    return status;
   }
 }
 
 async function findOrCreateFolder(parentId: string, name: string): Promise<string> {
+  const cacheKey = `${parentId}:${name}`;
+  const cached = folderIdCache.get(cacheKey);
+  if (cached) return cached;
+
   const drive = await getDriveClient();
   const safeName = escapeDriveQueryValue(name);
   const q = `'${parentId}' in parents and mimeType='${DRIVE_FOLDER_MIME}' and trashed=false and name='${safeName}'`;
@@ -206,7 +243,10 @@ async function findOrCreateFolder(parentId: string, name: string): Promise<strin
     supportsAllDrives: true,
   });
   const existingId = listed.data.files?.[0]?.id;
-  if (existingId) return existingId;
+  if (existingId) {
+    folderIdCache.set(cacheKey, existingId);
+    return existingId;
+  }
 
   const created = await drive.files.create({
     requestBody: {
@@ -218,6 +258,7 @@ async function findOrCreateFolder(parentId: string, name: string): Promise<strin
     supportsAllDrives: true,
   });
   if (!created.data.id) throw new Error(`Drive klasörü oluşturulamadı: ${name}`);
+  folderIdCache.set(cacheKey, created.data.id);
   return created.data.id;
 }
 
@@ -239,6 +280,11 @@ async function ensureManagedUserFolderTree(userId: string) {
 }
 
 export async function getOrCreateUserDriveWorkspace(userId: string): Promise<UserDriveWorkspace> {
+  const cached = userWorkspaceCache.get(userId);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.value;
+  }
+
   await ensureMaterialsSchema();
 
   const existing = await prisma.$queryRaw<UserDriveWorkspace[]>`
@@ -252,7 +298,13 @@ export async function getOrCreateUserDriveWorkspace(userId: string): Promise<Use
     WHERE user_id = ${userId}
     LIMIT 1
   `;
-  if (existing.length > 0) return existing[0]!;
+  if (existing.length > 0) {
+    userWorkspaceCache.set(userId, {
+      value: existing[0]!,
+      expiresAt: Date.now() + USER_WORKSPACE_TTL_MS,
+    });
+    return existing[0]!;
+  }
 
   const created = await ensureManagedUserFolderTree(userId);
   await prisma.$executeRaw`
@@ -282,10 +334,15 @@ export async function getOrCreateUserDriveWorkspace(userId: string): Promise<Use
           updated_at = NOW()
   `;
 
-  return {
+  const workspace = {
     userId,
     ...created,
   };
+  userWorkspaceCache.set(userId, {
+    value: workspace,
+    expiresAt: Date.now() + USER_WORKSPACE_TTL_MS,
+  });
+  return workspace;
 }
 
 export async function uploadBinaryToDriveFolder(params: {
@@ -366,6 +423,10 @@ export async function moveDriveFileToFolder(fileId: string, targetFolderId: stri
 }
 
 export async function listLibraryFiles(limitPerBucket = 20): Promise<LibraryFile[]> {
+  if (libraryFilesCache && libraryFilesCache.expiresAt > Date.now()) {
+    return libraryFilesCache.value;
+  }
+
   const rootFolderId = getRootFolderId();
   if (!rootFolderId) return [];
 
@@ -398,5 +459,7 @@ export async function listLibraryFiles(limitPerBucket = 20): Promise<LibraryFile
     }
   }
 
-  return all.sort((a, b) => (b.modifiedTime ?? "").localeCompare(a.modifiedTime ?? ""));
+  const value = all.sort((a, b) => (b.modifiedTime ?? "").localeCompare(a.modifiedTime ?? ""));
+  libraryFilesCache = { value, expiresAt: Date.now() + LIBRARY_TTL_MS };
+  return value;
 }

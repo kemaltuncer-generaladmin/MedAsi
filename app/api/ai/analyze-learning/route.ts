@@ -4,7 +4,11 @@ import { prisma } from '@/lib/prisma';
 import { getSystemSettingsFromDb } from '@/lib/system-settings';
 import { createSystemLog } from '@/lib/system-log';
 import { createCentralAiRuntime } from "@/lib/ai/orchestrator";
+import { withCentralAiRuntimeFailover } from "@/lib/ai/failover";
 import { recordAiUsageTelemetry } from "@/lib/ai/telemetry";
+import { geminiErrorToResponsePayload, isGeminiErrorLike } from "@/lib/ai/google-errors";
+import { rememberUserSignals } from "@/lib/ai/personalization";
+import { maskGeminiEnvName } from "@/lib/ai/env";
 
 export async function POST(req: NextRequest) {
   try {
@@ -53,17 +57,39 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Global AI disabled" }, { status: 403 });
     }
 
-    const result = await generateText({
-      model: aiRuntime.model,
-      system: `Sen bir tıp eğitimi analiz sistemisin. Öğrenci performans verisini analiz et ve SADECE aşağıdaki JSON formatında yanıt ver. Başka metin yazma.\n\n{\n  "topicMastery": { "KonuAdı": 0.0 },\n  "weakAreas": ["en zayıf 3 konu"],\n  "strongAreas": ["en güçlü 3 konu"],\n  "aiSummary": "Türkçe 1-2 cümle özet"\n}`,
-      prompt: `Son 30 günlük performans:\n${statsText}`,
-      temperature: aiRuntime.temperature,
-      maxOutputTokens: aiRuntime.maxOutputTokens,
-    });
+    const runtimeResult = await withCentralAiRuntimeFailover(
+      {
+        moduleName: "analyze-learning",
+        requestedModel: "EFFICIENT",
+        requestedMaxOutputTokens: 600,
+      },
+      async (runtime) =>
+        generateText({
+          model: runtime.model,
+          system: `Sen bir tıp eğitimi analiz sistemisin. Öğrenci performans verisini analiz et ve SADECE aşağıdaki JSON formatında yanıt ver. Başka metin yazma.\n\n{\n  "topicMastery": { "KonuAdı": 0.0 },\n  "weakAreas": ["en zayıf 3 konu"],\n  "strongAreas": ["en güçlü 3 konu"],\n  "aiSummary": "Türkçe 1-2 cümle özet"\n}`,
+          prompt: `Son 30 günlük performans:\n${statsText}`,
+          temperature: runtime.temperature,
+          maxOutputTokens: runtime.maxOutputTokens,
+        }),
+    );
+    const activeRuntime = runtimeResult.runtime;
+    if (runtimeResult.retried) {
+      await createSystemLog({
+        level: "warn",
+        category: "ai",
+        message: "Analyze-learning key failover uygulandı",
+        details:
+          `module=analyze-learning | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+          `key=${maskGeminiEnvName(activeRuntime.keyName)} (${activeRuntime.keySource ?? "unknown"})`,
+        userId,
+      }).catch(() => {});
+    }
+    const result = runtimeResult.value;
     await recordAiUsageTelemetry({
       userId,
       route: "/api/ai/analyze-learning",
-      model: aiRuntime.modelId,
+      model: activeRuntime.modelId,
+      keyName: activeRuntime.keyName,
       inputTokens: (result.usage as { inputTokens?: number } | undefined)?.inputTokens ?? 0,
       outputTokens: (result.usage as { outputTokens?: number } | undefined)?.outputTokens ?? 0,
       module: "analyze-learning",
@@ -103,6 +129,15 @@ export async function POST(req: NextRequest) {
         lastAnalyzedAt: new Date()
       }
     });
+    void rememberUserSignals({
+      userId,
+      moduleName: "analyze-learning",
+      insight: {
+        weakAreas: Array.isArray(analysis.weakAreas) ? analysis.weakAreas : [],
+        strongAreas: Array.isArray(analysis.strongAreas) ? analysis.strongAreas : [],
+        summary: typeof analysis.aiSummary === "string" ? analysis.aiSummary : null,
+      },
+    }).catch(() => {});
 
     await createSystemLog({
       level: "info",
@@ -115,6 +150,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error('Analyze Learning Error:', error);
+    if (isGeminiErrorLike(error)) {
+      const geminiError = geminiErrorToResponsePayload(error);
+      await createSystemLog({
+        level: "error",
+        category: "ai",
+        message: `Gemini hatası (${geminiError.reason})`,
+        details: `module=analyze-learning | reason=${geminiError.reason} | message=${geminiError.message}`,
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: geminiError.message, reason: geminiError.reason },
+        { status: geminiError.status },
+      );
+    }
     await createSystemLog({
       level: "error",
       category: "ai",

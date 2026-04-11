@@ -84,11 +84,11 @@ export default function ForgotPasswordPage() {
           label="E-posta"
           placeholder="dr@ornek.com"
           required
-          className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)]"
+          className="h-11 rounded border-[#1E1E2E] bg-[var(--color-background)]"
           hint="Güvenlik için hesap olup olmadığı açıklanmaz."
         />
 
-        <Button type="submit" disabled={isPending} className="w-full h-11 rounded-[4px]">
+        <Button type="submit" disabled={isPending} className="w-full h-11 rounded">
           {isPending ? (
             <>
               <Loader2 size={16} className="animate-spin" />

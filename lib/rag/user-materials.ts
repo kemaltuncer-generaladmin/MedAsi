@@ -36,7 +36,13 @@ export interface UserMaterial {
   branch: string;
   chunkCount: number;
   pageCount: number | null;
+  slideCount?: number | null;
   errorMessage: string | null;
+  processingStage?: string;
+  qualityScore?: number | null;
+  extractionConfidence?: number | null;
+  readyForQuestions?: boolean;
+  readyForFlashcards?: boolean;
   managedDrivePath?: string;
   managedProcessedPath?: string;
   createdAt: Date;
@@ -109,12 +115,13 @@ export async function createMaterial(data: {
 }
 
 // ─── Materyal güncelle ────────────────────────────────────────────────────────
-async function updateMaterial(
+export async function updateMaterial(
   materialId: string,
   status: string,
   chunkCount: number,
   pageCount?: number,
   errorMessage?: string,
+  processingStage?: string,
 ) {
   await ensureMaterialsSchema();
   await prisma.$executeRaw`
@@ -122,6 +129,7 @@ async function updateMaterial(
     SET status = ${status}, chunk_count = ${chunkCount},
         page_count = ${pageCount ?? null},
         error_message = ${errorMessage ?? null},
+        processing_stage = COALESCE(${processingStage ?? null}, processing_stage),
         updated_at = NOW()
     WHERE id = ${materialId}
   `;
@@ -294,6 +302,12 @@ export async function listUserMaterials(userId: string): Promise<UserMaterial[]>
       managed_drive_archive_file_id AS "managedDriveArchiveFileId",
       branch,
       chunk_count AS "chunkCount", page_count AS "pageCount",
+      slide_count AS "slideCount",
+      processing_stage AS "processingStage",
+      quality_score AS "qualityScore",
+      extraction_confidence AS "extractionConfidence",
+      ready_for_questions AS "readyForQuestions",
+      ready_for_flashcards AS "readyForFlashcards",
       error_message AS "errorMessage", created_at AS "createdAt", updated_at AS "updatedAt"
     FROM user_materials
     WHERE user_id = ${userId}
@@ -338,10 +352,15 @@ export async function getMaterialById(userId: string, materialId: string): Promi
   await ensureMaterialsSchema();
   const rows = await prisma.$queryRaw<any[]>`
     SELECT id, user_id AS "userId", name, type, status, branch, chunk_count AS "chunkCount",
-           page_count AS "pageCount", source, drive_web_view_link AS "driveWebViewLink",
+           page_count AS "pageCount", slide_count AS "slideCount", source, drive_web_view_link AS "driveWebViewLink",
            managed_drive_file_id AS "managedDriveFileId",
            managed_drive_processed_file_id AS "managedDriveProcessedFileId",
            managed_drive_archive_file_id AS "managedDriveArchiveFileId",
+           processing_stage AS "processingStage",
+           quality_score AS "qualityScore",
+           extraction_confidence AS "extractionConfidence",
+           ready_for_questions AS "readyForQuestions",
+           ready_for_flashcards AS "readyForFlashcards",
            created_at AS "createdAt"
     FROM user_materials WHERE id = ${materialId} AND user_id = ${userId} LIMIT 1
   `;

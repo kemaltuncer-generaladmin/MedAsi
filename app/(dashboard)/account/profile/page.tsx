@@ -1,23 +1,29 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { useEffect, useMemo, useState } from "react";
 import {
-  User,
-  Mail,
-  Phone,
-  MapPin,
-  GraduationCap,
   Building2,
-  Calendar,
-  Stethoscope,
   Camera,
+  GraduationCap,
+  Mail,
+  MapPin,
+  Phone,
   Save,
-  CheckCircle2,
+  ShieldCheck,
+  Stethoscope,
+  User,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { AccountSubpageShell } from "@/components/account/AccountSubpageShell";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+
+type Taxonomy = {
+  universities: Array<{ id: string; name: string }>;
+  programs: Array<{ id: string; name: string; universityId: string }>;
+  terms: Array<{ id: string; name: string; programId: string }>;
+};
 
 interface ProfileData {
   displayName: string;
@@ -28,6 +34,11 @@ interface ProfileData {
   institution: string;
   graduationYear: string;
   specialty: string;
+  universityId: string;
+  programId: string;
+  termId: string;
+  visibilityLevel: string;
+  verificationStatus: string;
   lastUpdated: string;
 }
 
@@ -40,6 +51,11 @@ const defaultProfile: ProfileData = {
   institution: "",
   graduationYear: "",
   specialty: "",
+  universityId: "",
+  programId: "",
+  termId: "",
+  visibilityLevel: "verified_only",
+  verificationStatus: "pending",
   lastUpdated: "",
 };
 
@@ -48,50 +64,104 @@ function getInitials(name: string): string {
   return name
     .trim()
     .split(/\s+/)
-    .map((w) => w[0]?.toUpperCase() ?? "")
+    .map((word) => word[0]?.toUpperCase() ?? "")
     .slice(0, 2)
     .join("");
 }
 
+function verificationLabel(status: string): string {
+  if (status === "verified") return "Doğrulandı";
+  if (status === "manual_review") return "İncelemede";
+  return "Beklemede";
+}
+
+function verificationVariant(status: string): "success" | "warning" | "secondary" {
+  if (status === "verified") return "success";
+  if (status === "manual_review") return "warning";
+  return "secondary";
+}
+
 export default function ProfilePage() {
   const [profile, setProfile] = useState<ProfileData>(defaultProfile);
+  const [taxonomy, setTaxonomy] = useState<Taxonomy | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    async function loadProfile() {
+    async function load() {
       try {
-        const res = await fetch("/api/user/profile");
-        if (!res.ok) throw new Error("Failed to load profile");
-        const data = await res.json();
+        const [profileRes, taxonomyRes] = await Promise.all([
+          fetch("/api/user/profile", { cache: "no-store" }),
+          fetch("/api/community/taxonomy", { cache: "no-store" }),
+        ]);
 
-        const goals = data.goals as Record<string, string> | null;
+        if (!profileRes.ok || !taxonomyRes.ok) {
+          throw new Error("Profil verileri yüklenemedi");
+        }
 
+        const [profileData, taxonomyData] = await Promise.all([
+          profileRes.json(),
+          taxonomyRes.json(),
+        ]);
+
+        const goals = profileData.goals as Record<string, string> | null;
+        const academicProfile = profileData.academicProfile as
+          | {
+              universityId?: string | null;
+              programId?: string | null;
+              termId?: string | null;
+              specialty?: string | null;
+              verificationStatus?: string | null;
+              visibilityLevel?: string | null;
+              universityName?: string | null;
+            }
+          | null;
+
+        setTaxonomy(taxonomyData);
         setProfile({
-          displayName: data.name ?? "",
-          email: data.email ?? "",
+          displayName: profileData.name ?? "",
+          email: profileData.email ?? "",
           phone: goals?.phone ?? "",
           city: goals?.city ?? "",
           role: goals?.role ?? "",
-          institution: goals?.institution ?? "",
+          institution: academicProfile?.universityName ?? goals?.institution ?? "",
           graduationYear: goals?.graduationYear ?? "",
-          specialty: goals?.specialty ?? "",
+          specialty: academicProfile?.specialty ?? goals?.specialty ?? "",
+          universityId: academicProfile?.universityId ?? "",
+          programId: academicProfile?.programId ?? "",
+          termId: academicProfile?.termId ?? "",
+          visibilityLevel: academicProfile?.visibilityLevel ?? "verified_only",
+          verificationStatus: academicProfile?.verificationStatus ?? "pending",
           lastUpdated: "",
         });
-      } catch {
-        toast.error("Profil yüklenirken bir hata oluştu");
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Profil yüklenemedi");
       } finally {
         setLoading(false);
       }
     }
 
-    loadProfile();
+    void load();
   }, []);
+
+  const filteredPrograms = useMemo(
+    () =>
+      taxonomy?.programs.filter(
+        (item) => !profile.universityId || item.universityId === profile.universityId,
+      ) ?? [],
+    [taxonomy, profile.universityId],
+  );
+
+  const filteredTerms = useMemo(
+    () =>
+      taxonomy?.terms.filter(
+        (item) => !profile.programId || item.programId === profile.programId,
+      ) ?? [],
+    [taxonomy, profile.programId],
+  );
 
   function handleChange(field: keyof ProfileData, value: string) {
     setProfile((prev) => ({ ...prev, [field]: value }));
-    setSaved(false);
   }
 
   async function handleSave() {
@@ -108,12 +178,16 @@ export default function ProfilePage() {
           institution: profile.institution,
           graduationYear: profile.graduationYear,
           specialty: profile.specialty,
+          universityId: profile.universityId || null,
+          programId: profile.programId || null,
+          termId: profile.termId || null,
+          visibilityLevel: profile.visibilityLevel,
         }),
       });
 
-      if (!res.ok) throw new Error("Save failed");
+      if (!res.ok) throw new Error("Profil kaydedilemedi");
 
-      const lastUpdated = new Date().toLocaleDateString("tr-TR", {
+      const lastUpdated = new Date().toLocaleString("tr-TR", {
         day: "2-digit",
         month: "2-digit",
         year: "numeric",
@@ -122,272 +196,254 @@ export default function ProfilePage() {
       });
 
       setProfile((prev) => ({ ...prev, lastUpdated }));
-      setSaved(true);
-      toast.success("Profil kaydedildi");
+      toast.success("Profil güncellendi");
     } catch {
-      toast.error("Kayıt sırasında bir hata oluştu");
+      toast.error("Profil kaydedilemedi");
     } finally {
       setSaving(false);
     }
   }
 
   const inputClass =
-    "w-full px-3 py-2 rounded-md text-sm bg-[var(--color-surface-elevated)] border border-[var(--color-border)] text-[var(--color-text-primary)] placeholder-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-all";
-  const selectClass = `${inputClass} appearance-none cursor-pointer`;
+    "w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)]";
 
-  if (loading) {
+  if (loading || !taxonomy) {
     return (
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div className="h-8 w-48 rounded bg-[var(--color-surface-elevated)] animate-pulse" />
-        <div className="h-32 rounded-xl bg-[var(--color-surface-elevated)] animate-pulse" />
-        <div className="h-64 rounded-xl bg-[var(--color-surface-elevated)] animate-pulse" />
+      <div className="space-y-4">
+        <div className="h-36 animate-pulse rounded-3xl bg-[var(--color-surface-elevated)]" />
+        <div className="h-52 animate-pulse rounded-3xl bg-[var(--color-surface-elevated)]" />
+        <div className="h-52 animate-pulse rounded-3xl bg-[var(--color-surface-elevated)]" />
       </div>
     );
   }
 
+  const selectedUniversity =
+    taxonomy.universities.find((item) => item.id === profile.universityId)?.name ?? "";
+
   return (
-    <div className="max-w-2xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-          Profilim
-        </h1>
-        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-          Kişisel ve eğitim bilgilerinizi güncelleyin
-        </p>
-      </div>
-
-      {/* Profil Fotoğrafı */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle>Profil Fotoğrafı</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-5">
-            <div
-              className="w-20 h-20 rounded-full flex items-center justify-center text-2xl font-bold text-black shrink-0"
-              style={{
-                background:
-                  "linear-gradient(135deg, var(--color-primary), var(--color-secondary))",
-              }}
-            >
-              {getInitials(profile.displayName) || (
-                <User size={28} className="text-black" />
-              )}
-            </div>
+    <AccountSubpageShell
+      icon={User}
+      title="Profil"
+      description="Topluluk kimliği, akademik filtreler ve kişisel bilgiler burada yönetilir."
+      badge={verificationLabel(profile.verificationStatus)}
+      stats={[
+        { label: "E-posta", value: profile.email || "-" },
+        { label: "Üniversite", value: selectedUniversity || "Seçilmedi" },
+        { label: "Görünürlük", value: profile.visibilityLevel },
+        { label: "Son güncelleme", value: profile.lastUpdated || "Henüz yok" },
+      ]}
+      actions={
+        <>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="border border-[var(--color-border)]"
+            onClick={() => toast("Profil fotoğrafı özelliği yakında eklenecek", { icon: "⏳" })}
+          >
+            <Camera size={14} />
+            Fotoğraf
+          </Button>
+          <Button size="sm" loading={saving} onClick={handleSave}>
+            <Save size={14} />
+            Kaydet
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-5 xl:grid-cols-2">
+        <Card variant="bordered" className="rounded-3xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <User size={16} className="text-[var(--color-primary)]" />
+              Kişisel bilgiler
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => toast("Yakında aktif olacak", { icon: "⏳" })}
-                className="border border-[var(--color-border)]"
-              >
-                <Camera size={14} />
-                Fotoğraf Yükle
-              </Button>
-              <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-                JPG, PNG veya GIF. Maks 2 MB.
-              </p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Kişisel Bilgiler */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <User size={18} className="text-[var(--color-primary)]" />
-            Kişisel Bilgiler
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-primary)]">
                 Ad Soyad
               </label>
               <input
                 type="text"
                 value={profile.displayName}
-                onChange={(e) => handleChange("displayName", e.target.value)}
-                placeholder="Adınız ve soyadınız"
+                onChange={(event) => handleChange("displayName", event.target.value)}
                 className={inputClass}
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5 flex items-center gap-2">
-                <Mail
-                  size={14}
-                  className="text-[var(--color-text-secondary)]"
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                <Mail size={14} /> E-posta
+              </label>
+              <input type="email" value={profile.email} disabled className={`${inputClass} opacity-70`} />
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                  <Phone size={14} /> Telefon
+                </label>
+                <input
+                  type="text"
+                  value={profile.phone}
+                  onChange={(event) => handleChange("phone", event.target.value)}
+                  className={inputClass}
                 />
-                E-Posta
-                <Badge variant="secondary" className="text-xs ml-1">
-                  Salt Okunur
-                </Badge>
-              </label>
-              <input
-                type="email"
-                disabled
-                value={profile.email}
-                className="w-full px-3 py-2 rounded-md text-sm bg-[var(--color-surface)] border border-[var(--color-border)] text-[var(--color-text-secondary)] cursor-not-allowed opacity-60"
-              />
+              </div>
+              <div>
+                <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                  <MapPin size={14} /> Şehir
+                </label>
+                <input
+                  type="text"
+                  value={profile.city}
+                  onChange={(event) => handleChange("city", event.target.value)}
+                  className={inputClass}
+                />
+              </div>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Phone
-                    size={14}
-                    className="text-[var(--color-text-secondary)]"
-                  />{" "}
-                  Telefon{" "}
-                  <span className="text-[var(--color-text-secondary)] font-normal">
-                    (opsiyonel)
-                  </span>
-                </span>
-              </label>
-              <input
-                type="tel"
-                value={profile.phone}
-                onChange={(e) => handleChange("phone", e.target.value)}
-                placeholder="+90 5xx xxx xx xx"
-                className={inputClass}
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <MapPin
-                    size={14}
-                    className="text-[var(--color-text-secondary)]"
-                  />{" "}
-                  Şehir
-                </span>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-primary)]">
+                Hedef rol / odak
               </label>
               <input
                 type="text"
-                value={profile.city}
-                onChange={(e) => handleChange("city", e.target.value)}
-                placeholder="İstanbul, Ankara, İzmir..."
+                value={profile.role}
+                onChange={(event) => handleChange("role", event.target.value)}
+                placeholder="Örn: TUS hazırlığı, intern klinik pratiği"
                 className={inputClass}
               />
             </div>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
 
-      {/* Eğitim Durumu */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <GraduationCap size={18} className="text-[var(--color-primary)]" />
-            Eğitim Durumu
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-4">
+        <Card variant="bordered" className="rounded-3xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <GraduationCap size={16} className="text-[var(--color-primary)]" />
+              Akademik kimlik
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                Unvan / Rol
+              <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                <Building2 size={14} /> Üniversite
               </label>
               <select
-                value={profile.role}
-                onChange={(e) => handleChange("role", e.target.value)}
-                className={selectClass}
+                value={profile.universityId}
+                onChange={(event) => {
+                  handleChange("universityId", event.target.value);
+                  handleChange("programId", "");
+                  handleChange("termId", "");
+                  handleChange(
+                    "institution",
+                    taxonomy.universities.find((item) => item.id === event.target.value)?.name ?? "",
+                  );
+                }}
+                className={inputClass}
               >
-                <option value="">Seçiniz...</option>
-                <option value="ogrenci">Tıp Öğrencisi</option>
-                <option value="intern">İntörn</option>
-                <option value="asistan">Asistan</option>
-                <option value="uzman">Uzman</option>
-                <option value="pratisyen">Pratisyen Hekim</option>
-                <option value="diger">Diğer</option>
+                <option value="">Üniversite seç</option>
+                {taxonomy.universities.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
               </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Building2
-                    size={14}
-                    className="text-[var(--color-text-secondary)]"
-                  />{" "}
-                  Üniversite / Hastane Adı
-                </span>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-primary)]">
+                Program / Fakülte
               </label>
-              <input
-                type="text"
-                value={profile.institution}
-                onChange={(e) => handleChange("institution", e.target.value)}
-                placeholder="Hacettepe Üniversitesi, Ankara Şehir Hastanesi..."
+              <select
+                value={profile.programId}
+                onChange={(event) => {
+                  handleChange("programId", event.target.value);
+                  handleChange("termId", "");
+                }}
                 className={inputClass}
-              />
+              >
+                <option value="">Program seç</option>
+                {filteredPrograms.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Calendar
-                    size={14}
-                    className="text-[var(--color-text-secondary)]"
-                  />{" "}
-                  Mezuniyet / Beklenen Mezuniyet Yılı
-                </span>
+              <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-primary)]">
+                Dönem / sınıf
               </label>
-              <input
-                type="text"
-                value={profile.graduationYear}
-                onChange={(e) => handleChange("graduationYear", e.target.value)}
-                placeholder="2025"
-                maxLength={4}
+              <select
+                value={profile.termId}
+                onChange={(event) => handleChange("termId", event.target.value)}
                 className={inputClass}
-              />
+              >
+                <option value="">Dönem seç</option>
+                {filteredTerms.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.name}
+                  </option>
+                ))}
+              </select>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                <span className="flex items-center gap-1.5">
-                  <Stethoscope
-                    size={14}
-                    className="text-[var(--color-text-secondary)]"
-                  />{" "}
-                  Branş / Uzmanlık Alanı
-                </span>
-              </label>
-              <input
-                type="text"
-                value={profile.specialty}
-                onChange={(e) => handleChange("specialty", e.target.value)}
-                placeholder="Kardiyoloji, Dahiliye, Genel Cerrahi..."
-                className={inputClass}
-              />
+            <div className="grid gap-4 md:grid-cols-2">
+              <div>
+                <label className="mb-1.5 flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                  <Stethoscope size={14} /> İlgi alanı
+                </label>
+                <input
+                  type="text"
+                  value={profile.specialty}
+                  onChange={(event) => handleChange("specialty", event.target.value)}
+                  placeholder="Örn: Dahiliye, cerrahi, farmakoloji"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-[var(--color-text-primary)]">
+                  Görünürlük
+                </label>
+                <select
+                  value={profile.visibilityLevel}
+                  onChange={(event) => handleChange("visibilityLevel", event.target.value)}
+                  className={inputClass}
+                >
+                  <option value="verified_only">Sadece doğrulanmış rozetli göster</option>
+                  <option value="public">Herkese açık göster</option>
+                  <option value="private">Sadece bana özel tut</option>
+                </select>
+              </div>
             </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card variant="bordered" className="rounded-3xl">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <ShieldCheck size={16} className="text-[var(--color-primary)]" />
+            Topluluk durumu
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+          <div className="space-y-1.5">
+            <p className="text-sm text-[var(--color-text-primary)]">
+              Bu alanlar topluluk filtrelerini, eşleşmeleri ve moderasyon kapsamını belirler.
+            </p>
+            <Badge variant={verificationVariant(profile.verificationStatus)}>
+              Doğrulama: {verificationLabel(profile.verificationStatus)}
+            </Badge>
+          </div>
+          <div className="flex h-14 w-14 items-center justify-center rounded-full bg-black/15 text-xl font-semibold text-[var(--color-text-primary)]">
+            {getInitials(profile.displayName)}
           </div>
         </CardContent>
       </Card>
-
-      {/* Kaydet */}
-      <div className="flex items-center justify-between pb-6">
-        <div className="text-sm text-[var(--color-text-secondary)]">
-          {profile.lastUpdated && (
-            <span className="flex items-center gap-1.5">
-              <CheckCircle2 size={14} className="text-[var(--color-success)]" />
-              Son güncelleme: {profile.lastUpdated}
-            </span>
-          )}
-        </div>
-        <Button
-          variant="primary"
-          size="md"
-          onClick={handleSave}
-          disabled={saving}
-        >
-          <Save size={15} />
-          {saving ? "Kaydediliyor..." : saved ? "Kaydedildi" : "Değişiklikleri Kaydet"}
-        </Button>
-      </div>
-    </div>
+    </AccountSubpageShell>
   );
 }

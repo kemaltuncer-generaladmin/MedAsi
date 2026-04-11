@@ -4,6 +4,39 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  background: var(--color-background);
+  color-scheme: dark;
+}
+
+body {
+  background:
+    radial-gradient(circle at top left, rgba(85, 214, 255, 0.12), transparent 28%),
+    radial-gradient(circle at 85% 10%, rgba(124, 231, 200, 0.1), transparent 22%),
+    linear-gradient(180deg, var(--color-background), var(--color-background-muted));
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  transition:
+    background-color var(--transition-slow),
+    color var(--transition-base);
+  min-height: 100vh;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--color-primary) 30%, transparent);
+  color: var(--color-text-primary);
+}
+
+a {
+  transition: color var(--transition-fast), opacity var(--transition-fast);
+}
+
+input,
+textarea,
+select {
+  color: var(--color-text-primary);
+}
+
 /* ─── Skip to content (erişilebilirlik) ────────────────────────────────── */
 .skip-to-content {
   position: absolute;
@@ -28,6 +61,17 @@
   outline: 2px solid var(--color-primary, #00C4EB);
   outline-offset: 3px;
   border-radius: 3px;
+}
+
+.glass-panel {
+  background: var(--glass-panel);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--glass-stroke), var(--shadow-md);
+  backdrop-filter: blur(22px);
+}
+
+.grid-shell {
+  position: relative;
 }
 /* Fare ile tıklamada görünmesin */
 :focus:not(:focus-visible) {
@@ -107,6 +151,60 @@
       0 0 0 1px color-mix(in srgb, var(--color-primary) 34%, transparent),
       0 0 32px color-mix(in srgb, var(--color-primary) 18%, transparent);
   }
+
+  .medasi-float-slow {
+    animation: medasi-float 8s ease-in-out infinite;
+  }
+
+  .medasi-float-medium {
+    animation: medasi-float 6.5s ease-in-out infinite;
+  }
+
+  .medasi-float-fast {
+    animation: medasi-float 5.5s ease-in-out infinite;
+  }
+
+  .medasi-drift {
+    animation: medasi-drift 11s ease-in-out infinite;
+  }
+
+  .medasi-pulse-halo {
+    animation: medasi-halo 9s ease-in-out infinite;
+  }
+
+  .medasi-orbit-ring {
+    animation: medasi-ring 16s linear infinite;
+  }
+
+  .medasi-grid-bg {
+    background-image:
+      linear-gradient(rgba(143, 197, 242, 0.08) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(143, 197, 242, 0.08) 1px, transparent 1px);
+    background-size: 48px 48px;
+    background-position: center center;
+  }
+
+  .medasi-scrollbar {
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in srgb, var(--color-primary) 35%, transparent) transparent;
+  }
+
+  .medasi-scrollbar::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .medasi-scrollbar::-webkit-scrollbar-thumb {
+    background: color-mix(in srgb, var(--color-primary) 24%, transparent);
+    border-radius: 999px;
+  }
+
+  .medasi-panel-title {
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    font-size: 0.7rem;
+    color: var(--color-text-disabled);
+  }
 }
 
 @keyframes medasi-ekg-wave {
@@ -132,5 +230,46 @@
   }
   to {
     background-position: -200% 0;
+  }
+}
+
+@keyframes medasi-float {
+  0%, 100% {
+    transform: translate3d(0, 0, 0);
+  }
+  50% {
+    transform: translate3d(0, -14px, 0);
+  }
+}
+
+@keyframes medasi-drift {
+  0%, 100% {
+    transform: translate3d(-12px, 0, 0) rotate(0deg);
+  }
+  50% {
+    transform: translate3d(12px, 16px, 0) rotate(12deg);
+  }
+}
+
+@keyframes medasi-halo {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.08);
+  }
+}
+
+@keyframes medasi-ring {
+  from {
+    transform: rotate(0deg) scale(1);
+  }
+  50% {
+    transform: rotate(180deg) scale(1.04);
+  }
+  to {
+    transform: rotate(360deg) scale(1);
   }
 }

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { normalizePackageTier } from "@/constants";
+import { ensureMaterialsSchema } from "@/lib/db/schema-guard";
 
 export const dynamic = "force-dynamic";
 
@@ -35,6 +36,7 @@ export async function GET() {
   const quotaBytes = QUOTA_MAP[packageTier] ?? DEFAULT_QUOTA;
 
   // Kullanılan depolama alanını hesapla
+  await ensureMaterialsSchema();
   const result = await prisma.$queryRaw<[{ used: bigint }]>`
     SELECT COALESCE(SUM(size_bytes), 0) AS used
     FROM user_materials

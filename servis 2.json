@@ -1,0 +1,13 @@
+{
+  "type": "service_account",
+  "project_id": "medasi-yapay-zeka-entegrasyonu",
+  "private_key_id": "9d2500798978b3b954beb084680a0794a59f673e",
+  "private_key": "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC9qPWePHVAxWui\nywb7fIrXOgMrYJ8U0OTJBrmfc71fx/4mbhuRWtWCPXTSbKqniRpNXCCD6M4Ncbnj\nBCUyjv2KbNkY9j9hMgeAZZ9oYnbYP/3J44yKYEimAOjqMIMv/fR9e89lRuIWCOJO\n2OfryPypjGCU0M9YLv6Cn6skRczP16zO0bCzInoMNSY7VzlxfeJS+7uJojGpXcA6\nNI6KwbcDBO9I+bLPxnOXEClwxXnYfLUK2NYHvfD9KwiFz9KrxFSF6U7sb+oMlOM+\n/t4uTQMcWB5kAesFnCL3h25m8n4rvrGV5D4d8dg6DpaG0GhfXSxwoG+YwzMsqLtj\no9AiF087AgMBAAECggEANwkT+S5vEfQX114V8R1DRtBJQimgEBDMCv+eFsSls+kb\neXhjHItgwJHn1/X7kXEqBj/RGaYRQPp66AL4blLrBOOwHdu7KY+0eJBEsSw9c2Qi\nV5bl3fOxsSY7cFXSg7csXstyM9/dVGqQjTPJHPUuSF75WcW8HUlJxorhxT1SAQ+D\nbf9MJeFBfv+5Pd5uBSNfdBJxnV3AClLU4CWWFiOVzukGgzYqEzNtZdTo+4WipI94\nQxeRBBv/sDmthkw5NMJk7rsOomumxiTzH12yKSobGMFkFaZ96xOJfh6F9sb6NkTt\nwaS+0OvumiYAPXWvcXjwCX2C+n4eiWcrWFw2psmQIQKBgQDdgbcZ1LzsrysauFih\nP9S3seKn3ijO1npolPCfTqTI/vzXegsCp3E7mVdQK14APswz4FZRZV2G8+/mbO3e\nrW+3Juey1BrmBFPo+CYbgh6vKjMY1LQzZEwZDhUrt03uadl8KWWv/9APfmbMq6G7\nY81e86mmoOsaKEFU8PhZPLg3mwKBgQDbMa/YmsMCQ7jq05JLEQ8bi/Hm6CjSTWvP\naTHkq+E3WJ4qzIwe58XEZvw0axuQiSaYmDcDJdbemCT/3Y/oESef4UVzIDybmjK0\ngK3I8NEEeqKvWmgL8ags8VrIa4CpEyOYPEM2LEGZe5rw8sLCBUFltZaXUqcT+31h\nDmjKYEpQ4QKBgHXnSdMSDc3eH4+FeIe8NjnhEchQ1F/kghuQy9PARK5IK8V2TM4I\n2pjisjsWGl7/Diq+yrNgxTvENHnumV7h6okOyF3D0N2GiDOFgqM5y6NpTvF0psaE\nKI1dlZ9DXtP8u6r/TgU0oUbd/VIMOXZJVVOpVzA+j2XI752K9mZpj5TpAoGBAKtY\nsQzTFkRL6l7vWvoBcNzozgXiUB7t1KxDoHQQhLL+PE5areJu7iN1Ggxj+h1HiXtZ\n6g804j4Jk0rMyXTxDBeoQuEXPymoJaECwldFIS+uKkSHmLRViVDwrzXjC6Wfx4B3\nA1dyyykO/fUC4IpJD3FRvVG3k9JEEyPu3q3tDcshAoGBAIEHoEnPaK/7X2etBx2m\nTKydCjLNnpI/n/E3lB/WRx6cxtNS18jNSdm848pA7ZOoW406FCJRZaUzoxDMElxc\nLtLPQBCA8MuN8flc8pSZ1LvwoIxwjrwZZFeAlWis/UiU1Ccg7T73p8oo3o1eiLOL\nXRjZT+hGXobfNueAMAyC063T\n-----END PRIVATE KEY-----\n",
+  "client_email": "medasi-master-agent@medasi-yapay-zeka-entegrasyonu.iam.gserviceaccount.com",
+  "client_id": "116910259438052264225",
+  "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+  "token_uri": "https://oauth2.googleapis.com/token",
+  "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
+  "client_x509_cert_url": "https://www.googleapis.com/robot/v1/metadata/x509/medasi-master-agent%40medasi-yapay-zeka-entegrasyonu.iam.gserviceaccount.com",
+  "universe_domain": "googleapis.com"
+}

@@ -2,27 +2,75 @@ import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { NextResponse, type NextRequest } from "next/server";
 
-// Modül toggle'larını DB'den çek (Supabase admin client ile, Prisma değil)
-async function getModuleToggles(): Promise<Record<string, boolean>> {
+const MODULE_TOGGLE_CACHE_TTL_MS = 60_000;
+const ACCESS_PROFILE_CACHE_TTL_MS = 30_000;
+
+let adminClient: ReturnType<typeof createSupabaseClient> | null = null;
+
+function getAdminClient() {
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return {};
+    return null;
   }
-  try {
-    const adminClient = createSupabaseClient(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+  if (!adminClient) {
+    adminClient = createSupabaseClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.SUPABASE_SERVICE_ROLE_KEY,
       { auth: { autoRefreshToken: false, persistSession: false } },
     );
-    const { data, error } = await adminClient
+  }
+  return adminClient;
+}
+
+const moduleToggleCache: {
+  value: Record<string, boolean>;
+  expiresAt: number;
+  inFlight: Promise<Record<string, boolean>> | null;
+} = {
+  value: {},
+  expiresAt: 0,
+  inFlight: null,
+};
+
+const accessProfileCache = new Map<
+  string,
+  { value: AccessProfile | null; expiresAt: number }
+>();
+const accessProfileInFlight = new Map<string, Promise<AccessProfile | null>>();
+
+// Modül toggle'larını DB'den çek (Supabase admin client ile, Prisma değil)
+async function getModuleToggles(): Promise<Record<string, boolean>> {
+  const now = Date.now();
+  if (moduleToggleCache.expiresAt > now) {
+    return moduleToggleCache.value;
+  }
+  if (moduleToggleCache.inFlight) {
+    return moduleToggleCache.inFlight;
+  }
+
+  const client = getAdminClient();
+  if (!client) return {};
+
+  moduleToggleCache.inFlight = (async () => {
+    try {
+      const { data, error } = await client
       .from("system_settings")
       .select("value")
       .eq("key", "moduleToggles")
       .maybeSingle();
-    if (error || !data?.value) return {};
-    return JSON.parse(data.value) as Record<string, boolean>;
-  } catch {
-    return {};
-  }
+      const toggleRow = data as { value?: string } | null;
+      if (error || !toggleRow?.value) return {};
+      const parsed = JSON.parse(toggleRow.value) as Record<string, boolean>;
+      moduleToggleCache.value = parsed;
+      moduleToggleCache.expiresAt = Date.now() + MODULE_TOGGLE_CACHE_TTL_MS;
+      return parsed;
+    } catch {
+      return {};
+    } finally {
+      moduleToggleCache.inFlight = null;
+    }
+  })();
+
+  return moduleToggleCache.inFlight;
 }
 
 // Modül ID → korunan path prefix'leri eşlemesi
@@ -37,11 +85,23 @@ const MODULE_PATH_MAP: Record<string, string[]> = {
   planners: ["/planners"],
   pomodoro: ["/pomodoro"],
 };
+const MODULE_GUARDED_PREFIXES = Array.from(
+  new Set(Object.values(MODULE_PATH_MAP).flat()),
+);
 
 type AccessProfile = {
   onboardingCompleted: boolean | null;
   packageName: string | null;
   role: string | null;
+};
+type AccessProfileRow = {
+  onboarding_completed?: boolean | null;
+  role?: string | null;
+  package?:
+    | { name?: string | null }
+    | Array<{ name?: string | null }>
+    | null
+    | undefined;
 };
 
 const USER_APP_PREFIXES = [
@@ -146,46 +206,58 @@ function isAppPathAllowedForPackage(pathname: string, packageName: string | null
   return pathStartsWithAny(pathname, FREE_EXTRA_PREFIXES);
 }
 
-async function getAccessProfile(userId: string): Promise<AccessProfile> {
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-    return { onboardingCompleted: null, packageName: null, role: null };
+async function getAccessProfile(userId: string): Promise<AccessProfile | null> {
+  const now = Date.now();
+  const cached = accessProfileCache.get(userId);
+  if (cached && cached.expiresAt > now) {
+    return cached.value;
   }
 
-  const adminClient = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    },
-  );
-
-  const { data, error } = await adminClient
-    .from("users")
-    .select("onboarding_completed, role, package:packages(name)")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (error) {
-    return { onboardingCompleted: null, packageName: null, role: null };
+  const inFlight = accessProfileInFlight.get(userId);
+  if (inFlight) {
+    return inFlight;
   }
 
-  const packageField = data?.package as
-    | { name?: string | null }
-    | Array<{ name?: string | null }>
-    | null
-    | undefined;
-  const packageName = Array.isArray(packageField)
-    ? packageField[0]?.name ?? null
-    : packageField?.name ?? null;
+  const client = getAdminClient();
+  if (!client) {
+    return null; // Fail-closed: config eksikse erişimi engelle
+  }
 
-  return {
-    onboardingCompleted: data?.onboarding_completed ?? null,
-    packageName,
-    role: data?.role ?? null,
-  };
+  const profilePromise = (async () => {
+    const { data, error } = await client
+      .from("users")
+      .select("onboarding_completed, role, package:packages(name)")
+      .eq("id", userId)
+      .maybeSingle();
+    const row = data as AccessProfileRow | null;
+
+    if (error || !row) {
+      return null;
+    }
+
+    const packageField = row.package;
+    const packageName = Array.isArray(packageField)
+      ? packageField[0]?.name ?? null
+      : packageField?.name ?? null;
+
+    return {
+      onboardingCompleted: row.onboarding_completed ?? null,
+      packageName,
+      role: row.role ?? null,
+    } satisfies AccessProfile;
+  })();
+
+  accessProfileInFlight.set(userId, profilePromise);
+  try {
+    const profile = await profilePromise;
+    accessProfileCache.set(userId, {
+      value: profile,
+      expiresAt: Date.now() + ACCESS_PROFILE_CACHE_TTL_MS,
+    });
+    return profile;
+  } finally {
+    accessProfileInFlight.delete(userId);
+  }
 }
 
 export async function middleware(request: NextRequest) {
@@ -221,7 +293,21 @@ export async function middleware(request: NextRequest) {
   } = await supabase.auth.getUser();
 
   const metadataRole = user?.user_metadata?.role as string | undefined;
-  const profile = user ? await getAccessProfile(user.id) : null;
+  const shouldLoadProfile =
+    user !== null &&
+    (isUserAppPath(pathname) ||
+      pathname === "/setup" ||
+      pathname === "/welcome" ||
+      pathname === "/login" ||
+      pathname.startsWith("/admin") ||
+      pathname.startsWith("/org-admin"));
+  const profile = user && shouldLoadProfile ? await getAccessProfile(user.id) : null;
+  
+  // Profile null ise (DB hatası), authenticated user'ı login'e geri gönder (fail-closed)
+  if (user && profile === null && pathStartsWithAny(pathname, USER_APP_PREFIXES)) {
+    return NextResponse.redirect(new URL("/login?error=auth_check_failed", request.url));
+  }
+  
   const role = profile?.role ?? metadataRole;
   const isPrivileged = role === "admin" || role === "org_admin";
 
@@ -253,7 +339,11 @@ export async function middleware(request: NextRequest) {
     }
 
     // Modül toggle kontrolü — admin kapalı mı?
-    if (onboardingCompleted === true && isUserAppPath(pathname)) {
+    if (
+      onboardingCompleted === true &&
+      isUserAppPath(pathname) &&
+      pathStartsWithAny(pathname, MODULE_GUARDED_PREFIXES)
+    ) {
       try {
         const moduleToggles = await getModuleToggles();
         for (const [moduleId, paths] of Object.entries(MODULE_PATH_MAP)) {
@@ -294,6 +384,8 @@ export async function middleware(request: NextRequest) {
 
   // ── Giriş yapmış kullanıcı /welcome veya /login'e girmeye çalışırsa ──
   if (user && (pathname === "/welcome" || pathname === "/login")) {
+    // Profile yüklenemezse (/dashboard yönlendirmesi döngüye girer) — sayfada kal
+    if (profile === null) return response;
     if (!isPrivileged) {
       const onboardingCompleted = profile?.onboardingCompleted ?? null;
       if (onboardingCompleted === false) {

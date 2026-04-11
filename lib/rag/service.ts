@@ -5,7 +5,9 @@ import path from "path";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/prisma";
-import { requireGeminiApiKey } from "@/lib/ai/env";
+import { getResolvedGeminiConfig } from "@/lib/ai/env";
+import { shouldRetryWithAlternateGeminiKey } from "@/lib/ai/failover";
+import { normalizeGeminiError } from "@/lib/ai/google-errors";
 
 type SourceRow = {
   sourceKey: string;
@@ -30,6 +32,11 @@ type IngestPdfInput = {
   title?: string;
   branch?: string;
 };
+
+const EMBEDDING_CONCURRENCY = Math.max(
+  1,
+  Number.parseInt(process.env.RAG_EMBED_CONCURRENCY ?? "3", 10) || 3,
+);
 
 function getEnv(name: string) {
   const value = process.env[name];
@@ -56,7 +63,11 @@ function createRagSupabaseClient() {
 }
 
 function getEmbeddingModel() {
-  const genAI = new GoogleGenerativeAI(requireGeminiApiKey());
+  const primary = getResolvedGeminiConfig("embeddings", { keyPreference: "server-first" });
+  if (!primary.apiKey) {
+    throw new Error("Gemini API key eksik. Beklenen anahtarlar: GEMINI_SERVER_API_KEY / GEMINI_KEY_EMBEDDINGS.");
+  }
+  const genAI = new GoogleGenerativeAI(primary.apiKey);
   return genAI.getGenerativeModel({ model: "text-embedding-004" });
 }
 
@@ -89,6 +100,29 @@ export function splitTextIntoChunks(text: string, chunkSize = 1000, overlap = 15
   }
 
   return chunks.filter(Boolean);
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  concurrency: number,
+  mapper: (item: T, index: number) => Promise<R>,
+) {
+  if (items.length === 0) return [];
+
+  const results = new Array<R>(items.length);
+  let nextIndex = 0;
+
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const current = nextIndex;
+      nextIndex += 1;
+      if (current >= items.length) return;
+      results[current] = await mapper(items[current], current);
+    }
+  });
+
+  await Promise.all(workers);
+  return results;
 }
 
 async function loadPdfParser() {
@@ -133,10 +167,29 @@ export async function ingestTextDocument({
 
   const supabase = createRagSupabaseClient();
   const model = getEmbeddingModel();
+  let fallbackModel: ReturnType<GoogleGenerativeAI["getGenerativeModel"]> | null = null;
 
-  for (let index = 0; index < chunks.length; index += 1) {
-    const chunk = chunks[index];
-    const result = await model.embedContent(chunk);
+  await mapWithConcurrency(chunks, EMBEDDING_CONCURRENCY, async (chunk, index) => {
+    let result;
+    try {
+      result = await model.embedContent(chunk);
+    } catch (error) {
+      if (!shouldRetryWithAlternateGeminiKey(error)) {
+        throw normalizeGeminiError(error);
+      }
+      if (!fallbackModel) {
+        const fallback = getResolvedGeminiConfig("embeddings", { keyPreference: "module-first" });
+        if (!fallback.apiKey) throw normalizeGeminiError(error);
+        fallbackModel = new GoogleGenerativeAI(fallback.apiKey).getGenerativeModel({
+          model: "text-embedding-004",
+        });
+      }
+      try {
+        result = await fallbackModel.embedContent(chunk);
+      } catch {
+        throw normalizeGeminiError(error);
+      }
+    }
     const embedding = result.embedding.values;
 
     const { error } = await supabase.rpc("insert_document_chunk", {
@@ -154,7 +207,7 @@ export async function ingestTextDocument({
     if (error) {
       throw new Error(`Supabase kayıt hatası: ${error.message}`);
     }
-  }
+  });
 
   return { insertedChunks: chunks.length, skipped: false };
 }
@@ -165,8 +218,10 @@ export async function ingestPdfFile({
   branch = "Genel",
 }: IngestPdfInput) {
   const absolutePath = path.resolve(/* turbopackIgnore: true */ filePath);
-  const stats = fs.statSync(/* turbopackIgnore: true */ absolutePath);
-  const buffer = fs.readFileSync(/* turbopackIgnore: true */ absolutePath);
+  const [stats, buffer] = await Promise.all([
+    fs.promises.stat(/* turbopackIgnore: true */ absolutePath),
+    fs.promises.readFile(/* turbopackIgnore: true */ absolutePath),
+  ]);
   const fileHash = crypto.createHash("sha256").update(buffer).digest("hex");
   const fileName = path.basename(/* turbopackIgnore: true */ absolutePath);
   const documentTitle = title || fileName.replace(/\.pdf$/i, "");
@@ -214,12 +269,13 @@ export async function ingestPdfFile({
 export async function scanWatchFolder(branch = "Genel") {
   const watchFolder = getDefaultWatchFolder();
 
-  if (!fs.existsSync(/* turbopackIgnore: true */ watchFolder)) {
+  try {
+    await fs.promises.access(/* turbopackIgnore: true */ watchFolder);
+  } catch {
     throw new Error(`İzlenen klasör bulunamadı: ${watchFolder}`);
   }
 
-  const files = fs
-    .readdirSync(/* turbopackIgnore: true */ watchFolder)
+  const files = (await fs.promises.readdir(/* turbopackIgnore: true */ watchFolder))
     .filter((file) => file.toLowerCase().endsWith(".pdf"))
     .sort((a, b) => a.localeCompare(b, "tr"));
 

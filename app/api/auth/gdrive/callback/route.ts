@@ -8,6 +8,21 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function inferCallbackErrorReason(err: unknown) {
+  const message =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : JSON.stringify(err ?? "");
+
+  if (/invalid[_-]?grant|revoked|reauth|expired/i.test(message)) {
+    return "reauth_required";
+  }
+
+  return "token_exchange";
+}
+
 /** GET /api/auth/gdrive/callback — Google OAuth callback */
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -15,7 +30,10 @@ export async function GET(req: NextRequest) {
   const state = url.searchParams.get("state");
   const errorParam = url.searchParams.get("error");
 
-  const appUrl = getAppBaseUrl();
+  const appUrl = getAppBaseUrl({
+    requestUrl: req.url,
+    headers: req.headers,
+  });
 
   if (errorParam || !code || !state) {
     return NextResponse.redirect(`${appUrl}/materials?gdrive=error&reason=${errorParam ?? "missing_params"}`);
@@ -27,7 +45,10 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    const tokens = await exchangeCodeForTokens(code);
+    const tokens = await exchangeCodeForTokens(code, {
+      requestUrl: req.url,
+      headers: req.headers,
+    });
     await saveUserTokens(
       userId,
       tokens.accessToken,
@@ -38,6 +59,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(`${appUrl}/materials?gdrive=connected`);
   } catch (err) {
     console.error("GDrive callback error:", err);
-    return NextResponse.redirect(`${appUrl}/materials?gdrive=error&reason=token_exchange`);
+    const reason = inferCallbackErrorReason(err);
+    return NextResponse.redirect(`${appUrl}/materials?gdrive=error&reason=${reason}`);
   }
 }

@@ -1,5 +1,11 @@
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
-import { getResolvedGeminiConfig, type GeminiApiModule } from "@/lib/ai/env";
+import {
+  getResolvedGeminiConfig,
+  type GeminiApiModule,
+  type GeminiKeyPreference,
+  type GeminiKeySource,
+} from "@/lib/ai/env";
+import { resolveAiModule } from "@/lib/ai/module-registry";
 import { getSettingMap } from "@/lib/system-settings";
 import { AI_LIMITS, clampOutputTokens } from "@/lib/ai/limits";
 
@@ -53,10 +59,12 @@ export type CentralAiSettings = {
 
 export type CentralAiRuntime = {
   settings: CentralAiSettings;
+  moduleId: string;
   modelType: AiModelType;
   modelId: string;
   keyName: string | null;
   keyModule: GeminiApiModule | null;
+  keySource: GeminiKeySource | null;
   model: ReturnType<ReturnType<typeof createGoogleGenerativeAI>>;
   temperature: number;
   maxOutputTokens: number;
@@ -147,17 +155,6 @@ function getTemperatureFromPreset(preset: CentralAiSettings["temperaturePreset"]
   }
 }
 
-function inferModuleModel(moduleName: string, fallback: AiModelType): AiModelType {
-  const module = moduleName.toLowerCase();
-  if (["ai-diagnosis", "case-rpg", "osce-evaluate", "mentor", "analyze-learning"].includes(module)) {
-    return "FAST";
-  }
-  if (["flashcards", "daily-briefing", "akilli-asistan", "source", "questions"].includes(module)) {
-    return "EFFICIENT";
-  }
-  return fallback;
-}
-
 function adjustTokensByLength(maxOutputTokens: number, responseLength?: UserResponseLength): number {
   if (!responseLength) return maxOutputTokens;
   if (responseLength === "short") return clampOutputTokens(Math.round(maxOutputTokens * 0.7), 256, maxOutputTokens);
@@ -193,7 +190,8 @@ export function resolveModelType(params: {
   requestedModel?: AiModelType;
   userPrefs?: UserAiPrefsLike;
 }): AiModelType {
-  const moduleName = params.moduleName?.trim().toLowerCase() ?? "";
+  const resolvedModule = resolveAiModule(params.moduleName);
+  const moduleName = resolvedModule.canonicalModuleId;
   const fromModuleOverride = moduleName ? params.settings.moduleModelOverrides[moduleName] : undefined;
   if (fromModuleOverride) return fromModuleOverride;
   if (params.requestedModel) return params.requestedModel;
@@ -201,9 +199,9 @@ export function resolveModelType(params: {
   const userModel = readUserModelPreference(params.userPrefs);
   if (userModel) return userModel;
 
-  if (params.settings.orchestrationMode === "quality") return "EFFICIENT";
+  if (params.settings.orchestrationMode === "quality") return "FAST";
   if (params.settings.orchestrationMode === "cost") return "EFFICIENT";
-  return "EFFICIENT";
+  return resolvedModule.config.defaultModel;
 }
 
 export function resolveMaxOutputTokens(params: {
@@ -212,7 +210,8 @@ export function resolveMaxOutputTokens(params: {
   requestedMaxOutputTokens?: number;
   userPrefs?: UserAiPrefsLike;
 }): number {
-  const moduleName = params.moduleName?.trim().toLowerCase() ?? "";
+  const resolvedModule = resolveAiModule(params.moduleName);
+  const moduleName = resolvedModule.canonicalModuleId;
   const moduleOverride = moduleName ? params.settings.moduleOutputOverrides[moduleName] : undefined;
 
   const baseMax = moduleOverride
@@ -224,7 +223,7 @@ export function resolveMaxOutputTokens(params: {
 }
 
 function resolveModelId(modelType: AiModelType, moduleName?: string) {
-  const normalized = moduleName?.trim().toLowerCase() ?? "";
+  const normalized = resolveAiModule(moduleName).canonicalModuleId;
   if (normalized === "osce-generate" || normalized === "osce-evaluate") {
     return "gemini-2.5-pro";
   }
@@ -236,21 +235,26 @@ export async function createCentralAiRuntime(params: {
   requestedModel?: AiModelType;
   requestedMaxOutputTokens?: number;
   userPrefs?: UserAiPrefsLike;
+  keyPreference?: GeminiKeyPreference;
 }): Promise<CentralAiRuntime> {
   const settings = await getCentralAiSettings();
+  const resolvedModule = resolveAiModule(params.moduleName);
   const modelType = resolveModelType({
     settings,
-    moduleName: params.moduleName,
+    moduleName: resolvedModule.canonicalModuleId,
     requestedModel: params.requestedModel,
     userPrefs: params.userPrefs,
   });
 
-  const modelId = resolveModelId(modelType, params.moduleName);
+  const modelId = resolveModelId(modelType, resolvedModule.canonicalModuleId);
   // Always permit legacy global-key fallback in runtime to avoid module-key misconfiguration outages.
-  const resolvedKey = getResolvedGeminiConfig(params.moduleName, { allowGlobalFallback: true });
+  const resolvedKey = getResolvedGeminiConfig(resolvedModule.canonicalModuleId, {
+    allowGlobalFallback: true,
+    keyPreference: params.keyPreference ?? "server-first",
+  });
   if (!resolvedKey.apiKey) {
     throw new Error(
-      `Gemini API key eksik (module=${params.moduleName ?? "general"}). ` +
+      `Gemini API key eksik (module=${resolvedModule.canonicalModuleId}). ` +
       `Beklenen anahtarlar: ${resolvedKey.expectedKeys.join(" / ")}. ` +
       `Global fallback: ${resolvedKey.fallbackAllowed ? "acik" : "kapali"}.`,
     );
@@ -259,15 +263,17 @@ export async function createCentralAiRuntime(params: {
 
   return {
     settings,
+    moduleId: resolvedModule.canonicalModuleId,
     modelType,
     modelId,
     keyName: resolvedKey.envName,
     keyModule: resolvedKey.module,
+    keySource: resolvedKey.keySource,
     model: google(modelId),
     temperature: getTemperatureFromPreset(settings.temperaturePreset),
     maxOutputTokens: resolveMaxOutputTokens({
       settings,
-      moduleName: params.moduleName,
+      moduleName: resolvedModule.canonicalModuleId,
       requestedMaxOutputTokens: params.requestedMaxOutputTokens,
       userPrefs: params.userPrefs,
     }),

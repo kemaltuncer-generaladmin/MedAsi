@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import {
@@ -33,6 +33,16 @@ const defaultPrefs: AIPrefs = {
   showReferences: true,
   addDisclaimer: true,
 };
+
+function readPrefsFromStorage(): AIPrefs | null {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (!raw) return null;
+    return { ...defaultPrefs, ...(JSON.parse(raw) as Partial<AIPrefs>) };
+  } catch {
+    return null;
+  }
+}
 
 function Toggle({
   enabled,
@@ -67,7 +77,7 @@ function buildSystemPrompt(prefs: AIPrefs): string {
 
   const lines: string[] = [];
   lines.push(
-    `Sen MEDASI adlı tıp eğitim platformunun merkezi AI çekirdeğinde çalışan ${prefs.model === "FAST" ? "FAST (gemini-2.5-flash)" : "EFFICIENT (gemini-2.5-flash)"} asistanısın.`,
+    `Sen MEDASI adlı tıp eğitim platformunun merkezi AI çekirdeğinde çalışan ${prefs.model === "FAST" ? "FAST (gemini-2.5-pro)" : "EFFICIENT (gemini-2.5-flash)"} asistanısın.`,
   );
   lines.push(`Yanıtlarını ${langMap[prefs.language]} olarak ver.`);
   lines.push(`Yanıt uzunluğu: ${lenMap[prefs.responseLength]}.`);
@@ -86,7 +96,7 @@ function buildSystemPrompt(prefs: AIPrefs): string {
 export default function AIControlPage() {
   const [prefs, setPrefs] = useState<AIPrefs>(defaultPrefs);
   const [saved, setSaved] = useState(false);
-  const [saveTimer, setSaveTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sayfa açıldığında DB'den yükle, localStorage cache olarak kullan
   useEffect(() => {
@@ -97,41 +107,45 @@ export default function AIControlPage() {
           setPrefs({ ...defaultPrefs, ...d.prefs });
           localStorage.setItem(PREFS_KEY, JSON.stringify({ ...defaultPrefs, ...d.prefs }));
         } else {
-          try {
-            const raw = localStorage.getItem(PREFS_KEY);
-            if (raw) setPrefs(JSON.parse(raw));
-          } catch {}
+          const cached = readPrefsFromStorage();
+          if (cached) setPrefs(cached);
         }
       })
       .catch(() => {
-        try {
-          const raw = localStorage.getItem(PREFS_KEY);
-          if (raw) setPrefs(JSON.parse(raw));
-        } catch {}
+        const cached = readPrefsFromStorage();
+        if (cached) setPrefs(cached);
       });
   }, []);
 
-  const autoSave = useCallback(
-    (updated: AIPrefs) => {
-      if (saveTimer) clearTimeout(saveTimer);
-      const timer = setTimeout(async () => {
-        try {
-          localStorage.setItem(PREFS_KEY, JSON.stringify(updated));
-          await fetch("/api/ai/prefs", {
-            method: "PUT",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updated),
-          });
-          setSaved(true);
-          setTimeout(() => setSaved(false), 2000);
-        } catch {
-          toast.error("Kayıt hatası");
+  const autoSave = useCallback((updated: AIPrefs) => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(async () => {
+      try {
+        localStorage.setItem(PREFS_KEY, JSON.stringify(updated));
+        const response = await fetch("/api/ai/prefs", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(updated),
+        });
+
+        if (!response.ok) {
+          throw new Error("Kaydetme isteği başarısız.");
         }
-      }, 600);
-      setSaveTimer(timer);
-    },
-    [saveTimer],
-  );
+
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2000);
+      } catch {
+        setSaved(false);
+        toast.error("Kayıt hatası");
+      }
+    }, 600);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    };
+  }, []);
 
   function update<K extends keyof AIPrefs>(key: K, value: AIPrefs[K]) {
     const updated = { ...prefs, [key]: value };
@@ -196,7 +210,7 @@ export default function AIControlPage() {
                 Hızlı & Güçlü
               </p>
               <Badge variant="secondary" className="text-xs mt-2">
-                gemini-2.5-flash
+                gemini-2.5-pro
               </Badge>
             </button>
 

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { formatSharedAiMemory } from "@/lib/ai/personalization";
 
 type LearningProfileSnapshot = {
   weakAreas?: unknown;
@@ -8,8 +9,13 @@ type LearningProfileSnapshot = {
   totalCorrect?: number | null;
 } | null;
 
+type UserPrefsSnapshot = {
+  aiMemory?: unknown;
+} | null;
+
 export type EnhancedContextOptions = {
   profile?: LearningProfileSnapshot;
+  notificationPrefs?: UserPrefsSnapshot;
   activePlanContent?: string | null;
 };
 
@@ -77,6 +83,7 @@ export async function getEnhancedContext(
             },
           })
         : null);
+    const aiMemorySummary = formatSharedAiMemory(options.notificationPrefs?.aiMemory);
 
     const activePlanContent =
       options.activePlanContent ?? (await loadActivePlanContent().catch(() => null));
@@ -92,6 +99,7 @@ export async function getEnhancedContext(
       strongAreas.length > 0 ? `Güçlü Alanlar: ${strongAreas.join(", ")}` : null,
       successRate !== null ? `Genel Başarı: %${successRate} (${totalC}/${totalQ} soru)` : null,
       profile?.aiSummary ? `AI Özeti: ${profile.aiSummary}` : null,
+      aiMemorySummary ? `Paylaşılan Hafıza:\n${aiMemorySummary}` : null,
       activePlanContent ? `Aktif Çalışma Planı: ${activePlanContent}` : null,
     ]
       .filter(Boolean)

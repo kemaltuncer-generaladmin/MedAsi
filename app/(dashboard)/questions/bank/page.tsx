@@ -21,7 +21,6 @@ import {
 import toast from "react-hot-toast";
 import { TUS_SUBJECTS_WITH_OTHER, type TusSubjectOrOther } from "@/constants/tus";
 
-const STORAGE_KEY = "medasi_soru_bankasi_v1";
 const WRONG_KEY = "medasi_hatali_sorular_v1";
 
 type Difficulty = "Kolay" | "Orta" | "Zor";
@@ -45,6 +44,12 @@ interface WrongAnswer {
   addedAt: string;
   learned: boolean;
 }
+
+type UsageSummary = {
+  limit: number | null;
+  used: number;
+  remaining: number | null;
+};
 
 const SUBJECTS: Subject[] = [...TUS_SUBJECTS_WITH_OTHER];
 
@@ -128,6 +133,7 @@ function difficultyBadgeVariant(
 
 export default function QuestionBankPage() {
   const [questions, setQuestions] = useState<Question[]>([]);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [mode, setMode] = useState<"list" | "practice" | "add">("list");
   const [filterSubject, setFilterSubject] = useState<Subject | "Tümü">("Tümü");
   const [filterDifficulty, setFilterDifficulty] = useState<Difficulty | "Tümü">(
@@ -163,20 +169,55 @@ export default function QuestionBankPage() {
     string | null
   >(null);
 
-  useEffect(() => {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (raw) {
-      setQuestions(JSON.parse(raw));
-    } else {
-      setQuestions(SAMPLE_QUESTIONS);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(SAMPLE_QUESTIONS));
-    }
-  }, []);
+  const loadQuestions = useCallback(async () => {
+    try {
+      const params = new URLSearchParams();
+      if (filterSubject !== "Tümü") params.set("subject", filterSubject);
+      if (filterDifficulty !== "Tümü") params.set("difficulty", filterDifficulty);
+      params.set("limit", "200");
 
-  const saveQuestions = useCallback((qs: Question[]) => {
-    setQuestions(qs);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(qs));
-  }, []);
+      const res = await fetch(`/api/questions/bank?${params.toString()}`, {
+        cache: "no-store",
+      });
+      if (!res.ok) throw new Error("load_failed");
+
+      const data = await res.json();
+      const remoteQuestions: Question[] = (data.questions ?? []).map((question: any) => {
+        const options = Array.isArray(question.options) ? question.options : [];
+        const correctIndex = OPTION_LABELS.indexOf(question.correctAnswer);
+        return {
+          id: question.id,
+          text: question.text,
+          options: [
+            options[0] ?? "",
+            options[1] ?? "",
+            options[2] ?? "",
+            options[3] ?? "",
+          ],
+          correct: (correctIndex >= 0 ? correctIndex : 0) as 0 | 1 | 2 | 3,
+          subject: question.subject,
+          difficulty:
+            question.difficulty === "kolay"
+              ? "Kolay"
+              : question.difficulty === "zor"
+                ? "Zor"
+                : "Orta",
+          explanation: question.explanation ?? "",
+          createdAt: question.createdAt ?? new Date().toISOString(),
+        };
+      });
+
+      setQuestions(remoteQuestions.length > 0 ? remoteQuestions : SAMPLE_QUESTIONS);
+      setUsage(data.usage ?? null);
+    } catch {
+      setQuestions(SAMPLE_QUESTIONS);
+      setUsage(null);
+    }
+  }, [filterDifficulty, filterSubject]);
+
+  useEffect(() => {
+    void loadQuestions();
+  }, [loadQuestions]);
 
   const filteredQuestions = questions.filter((q) => {
     if (filterSubject !== "Tümü" && q.subject !== filterSubject) return false;
@@ -230,6 +271,22 @@ export default function QuestionBankPage() {
           learned: false,
         });
         localStorage.setItem(WRONG_KEY, JSON.stringify(wrongs));
+        void fetch("/api/study/wrong-questions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            sourceQuestionId: q.id,
+            subject: q.subject,
+            difficulty: q.difficulty,
+            questionText: q.text,
+            options: q.options,
+            correctAnswer: q.correct,
+            userAnswer: idx,
+            explanation: q.explanation,
+            learned: false,
+            addedAt: new Date().toISOString(),
+          }),
+        }).catch(() => {});
       }
     }
   }
@@ -240,7 +297,17 @@ export default function QuestionBankPage() {
       toast.success(
         `Pratik tamamlandı! Doğru: ${sessionStats.correct + (selectedOption === practiceQueue[practiceIndex].correct ? 1 : 0)}, Yanlış: ${sessionStats.wrong}`,
       );
-      fetch('/api/questions/submit-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ results: sessionAttempts }) }).catch(console.error);
+      fetch('/api/questions/submit-session', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ results: sessionAttempts }) })
+        .then(async (res) => {
+          if (!res.ok) {
+            const data = await res.json().catch(() => null);
+            throw new Error(data?.error ?? "Soru oturumu kaydedilemedi.");
+          }
+          await loadQuestions();
+        })
+        .catch((error) => {
+          toast.error(error instanceof Error ? error.message : "Soru oturumu kaydedilemedi.");
+        });
       setSessionAttempts([]);
       return;
     }
@@ -255,45 +322,11 @@ export default function QuestionBankPage() {
   }
 
   function addQuestion() {
-    if (
-      !form.text.trim() ||
-      !form.optionA ||
-      !form.optionB ||
-      !form.optionC ||
-      !form.optionD
-    ) {
-      toast.error("Lütfen tüm alanları doldurun.");
-      return;
-    }
-    const newQ: Question = {
-      id: `q_${Date.now()}`,
-      text: form.text.trim(),
-      options: [form.optionA, form.optionB, form.optionC, form.optionD],
-      correct: parseInt(form.correct) as 0 | 1 | 2 | 3,
-      subject: form.subject,
-      difficulty: form.difficulty,
-      explanation: form.explanation.trim(),
-      createdAt: new Date().toISOString(),
-    };
-    saveQuestions([...questions, newQ]);
-    setForm({
-      text: "",
-      optionA: "",
-      optionB: "",
-      optionC: "",
-      optionD: "",
-      correct: "0",
-      subject: "Anatomi",
-      difficulty: "Orta",
-      explanation: "",
-    });
-    setMode("list");
-    toast.success("Soru eklendi!");
+    toast.error("Manuel soru ekleme kapatıldı. Havuzu admin panelinden yönetin.");
   }
 
   function deleteQuestion(id: string) {
-    saveQuestions(questions.filter((q) => q.id !== id));
-    toast.success("Soru silindi.");
+    toast.error(`Havuz soruları kullanıcı panelinden silinemez (${id}).`);
   }
 
   const currentQ = practiceQueue[practiceIndex];
@@ -691,14 +724,25 @@ export default function QuestionBankPage() {
             <p className="text-[var(--color-text-secondary)] text-sm">
               {questions.length} soru mevcut
             </p>
+            {usage && (
+              <p className="text-[var(--color-text-secondary)] text-xs mt-1">
+                {usage.limit === null
+                  ? "Bu paket için soru bankası sınırsız."
+                  : `Bu ay ${usage.used}/${usage.limit} soru kullanıldı${usage.remaining !== null ? ` · ${usage.remaining} kaldı` : ""}`}
+              </p>
+            )}
           </div>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => setMode("add")}
+            onClick={() =>
+              toast("Havuz soruları artık admin panelinden yönetiliyor.", {
+                icon: "i",
+              })
+            }
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl border-2 border-[var(--color-border)] bg-[var(--color-surface)] text-sm font-semibold text-[var(--color-text-primary)] hover:border-[var(--color-primary)]/50 hover:bg-[var(--color-primary)]/5 transition-all"
           >
-            <Plus size={15} /> Soru Ekle
+            <Plus size={15} /> Havuz Bilgisi
           </button>
           <button
             onClick={startPractice}

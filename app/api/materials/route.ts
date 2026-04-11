@@ -9,6 +9,14 @@ import {
 
 export const dynamic = "force-dynamic";
 
+function toJsonSafe<T>(value: T): T {
+  return JSON.parse(
+    JSON.stringify(value, (_, currentValue) =>
+      typeof currentValue === "bigint" ? Number(currentValue) : currentValue,
+    ),
+  ) as T;
+}
+
 /** GET /api/materials — kullanıcının materyalleri + istatistikler */
 export async function GET() {
   const supabase = await createClient();
@@ -23,7 +31,7 @@ export async function GET() {
   const workspace = handshake.ready ? await getOrCreateUserDriveWorkspace(user.id) : null;
   const libraryFiles = handshake.ready ? await listLibraryFiles(20).catch(() => []) : [];
 
-  return NextResponse.json({
+  return NextResponse.json(toJsonSafe({
     materials,
     stats,
     workspace,
@@ -39,7 +47,7 @@ export async function GET() {
       files: libraryFiles,
       readOnly: true,
     },
-  });
+  }));
 }
 
 /** DELETE /api/materials?id=xxx */

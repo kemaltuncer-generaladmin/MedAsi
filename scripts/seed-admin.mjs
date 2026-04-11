@@ -5,11 +5,11 @@
 import { createClient } from "@supabase/supabase-js";
 import { PrismaClient } from "@prisma/client";
 
-const SUPABASE_URL = "https://zjezqwcjrixkemdmrdoq.supabase.co";
-const SERVICE_ROLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InpqZXpxd2Nqcml4a2VtZG1yZG9xIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc3NTQ5NzUzMSwiZXhwIjoyMDkxMDczNTMxfQ.HcVRwR3X8HtdzuHodbqStdDGhzutMUehQfnY5AK71jM";
-const ADMIN_EMAIL = "admin@medasi.com.tr";
-const ADMIN_PASSWORD = "Bengu1903.";
+const SUPABASE_URL =
+  process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL || "";
+const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const ADMIN_EMAIL = process.env.ADMIN_EMAIL || "admin@medasi.com.tr";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "";
 
 const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { autoRefreshToken: false, persistSession: false },
@@ -18,6 +18,13 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const prisma = new PrismaClient();
 
 async function main() {
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+    throw new Error("NEXT_PUBLIC_SUPABASE_URL/SUPABASE_URL ve SUPABASE_SERVICE_ROLE_KEY zorunludur.");
+  }
+  if (!ADMIN_PASSWORD) {
+    throw new Error("ADMIN_PASSWORD zorunludur (örnek: ADMIN_PASSWORD='...' node scripts/seed-admin.mjs).");
+  }
+
   console.log("🔧 Admin seed başlıyor...\n");
 
   // 1. Paket var mı kontrol et, yoksa oluştur

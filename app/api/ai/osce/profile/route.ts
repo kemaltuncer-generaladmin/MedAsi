@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@prisma/client";
+import { rememberUserSignals } from "@/lib/ai/personalization";
 
 export interface OsceSessionResult {
   caseId: string;
@@ -111,6 +112,20 @@ export async function POST(req: NextRequest) {
     where: { id: user.id },
     data: { notificationPrefs: updatedPrefs },
   });
+
+  void rememberUserSignals({
+    userId: user.id,
+    moduleName: "osce-evaluate",
+    insight: {
+      weakAreas,
+      strongAreas,
+      studyFocus: [result.specialty, ...weakAreas].filter(Boolean),
+      summary: `OSCE ozeti: ${result.specialty} alaninda ortalama skor ${averageScore}/100. Zayif alanlar: ${weakAreas.slice(0, 3).join(", ") || "belirsiz"}.`,
+      keyObservation: result.totalScore < 70
+        ? `${result.specialty} OSCE performansinda ek pekistirme gerekiyor.`
+        : `${result.specialty} OSCE performansi toparlaniyor.`,
+    },
+  }).catch(() => {});
 
   return NextResponse.json({
     success: true,

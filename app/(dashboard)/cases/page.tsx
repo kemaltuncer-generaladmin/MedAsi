@@ -1,54 +1,32 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
-import { Input } from "@/components/ui/Input";
-import {
-  ClipboardList,
-  Plus,
-  Search,
-  Edit2,
-  Trash2,
-  X,
-  Calendar,
-  User,
-  Filter,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { ClipboardList, Plus, Search, Trash2, UserRoundPen } from "lucide-react";
 import toast from "react-hot-toast";
+import { ClinicHero, ClinicStat } from "@/components/clinic/ClinicSurface";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardTitle } from "@/components/ui/Card";
 
-type Case = {
+type CaseItem = {
   id: string;
   title: string;
   description: string;
   patientId?: string | null;
+  patient?: { id: string; name: string } | null;
   createdAt: string;
 };
+
 type Patient = { id: string; name: string };
-type FormData = { title: string; description: string; patientId: string };
-type Filter = "all" | "week" | "month";
 
 export default function CasesPage() {
-  const [cases, setCases] = useState<Case[]>([]);
+  const [cases, setCases] = useState<CaseItem[]>([]);
   const [patients, setPatients] = useState<Patient[]>([]);
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState<Case | null>(null);
-  const [form, setForm] = useState<FormData>({
-    title: "",
-    description: "",
-    patientId: "",
-  });
-  const [saving, setSaving] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState<Case | null>(null);
-  const [deleting, setDeleting] = useState(false);
+  const [editing, setEditing] = useState<CaseItem | null>(null);
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<Filter>("all");
-
-  useEffect(() => {
-    load();
-  }, []);
+  const [saving, setSaving] = useState(false);
+  const [form, setForm] = useState({ title: "", description: "", patientId: "" });
 
   async function load() {
     setLoading(true);
@@ -57,392 +35,213 @@ export default function CasesPage() {
         fetch("/api/cases"),
         fetch("/api/patients"),
       ]);
-      if (casesRes.ok) {
-        const d = await casesRes.json();
-        setCases(d.cases ?? []);
-      }
-      if (patientsRes.ok) {
-        const d = await patientsRes.json();
-        setPatients(d.patients ?? []);
-      }
+      if (!casesRes.ok || !patientsRes.ok) throw new Error();
+      const casesJson = await casesRes.json();
+      const patientsJson = await patientsRes.json();
+      setCases(casesJson.cases ?? []);
+      setPatients(patientsJson.patients ?? []);
     } catch {
-      toast.error("Vakalar yüklenemedi");
+      toast.error("Vaka ekranı yüklenemedi");
     } finally {
       setLoading(false);
     }
   }
 
-  function openCreate() {
-    setEditing(null);
-    setForm({ title: "", description: "", patientId: "" });
-    setShowForm(true);
-  }
+  useEffect(() => {
+    void load();
+  }, []);
 
-  function openEdit(c: Case) {
-    setEditing(c);
-    setForm({
-      title: c.title,
-      description: c.description,
-      patientId: c.patientId ?? "",
-    });
-    setShowForm(true);
-  }
+  const filtered = useMemo(
+    () =>
+      cases.filter((item) => {
+        const q = search.toLowerCase();
+        return (
+          item.title.toLowerCase().includes(q) ||
+          item.description.toLowerCase().includes(q) ||
+          (item.patient?.name ?? "").toLowerCase().includes(q)
+        );
+      }),
+    [cases, search],
+  );
 
   async function save() {
-    if (!form.title.trim()) {
-      toast.error("Vaka başlığı zorunludur");
+    if (!form.title.trim() || !form.description.trim()) {
+      toast.error("Başlık ve açıklama gerekli");
       return;
     }
-    if (!form.description.trim()) {
-      toast.error("Vaka açıklaması zorunludur");
-      return;
-    }
+
     setSaving(true);
     try {
-      const body = {
-        ...(editing && { id: editing.id }),
-        title: form.title,
-        description: form.description,
-        ...(form.patientId && { patientId: form.patientId }),
-      };
       const res = await fetch("/api/cases", {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
+        body: JSON.stringify({
+          ...(editing ? { id: editing.id } : {}),
+          ...form,
+          patientId: form.patientId || null,
+        }),
       });
       if (!res.ok) throw new Error();
       toast.success(editing ? "Vaka güncellendi" : "Vaka oluşturuldu");
       setShowForm(false);
-      load();
+      setEditing(null);
+      setForm({ title: "", description: "", patientId: "" });
+      await load();
     } catch {
-      toast.error("Kayıt başarısız");
+      toast.error("Vaka kaydı başarısız");
     } finally {
       setSaving(false);
     }
   }
 
-  async function deleteCase() {
-    if (!confirmDelete) return;
-    setDeleting(true);
+  async function remove(id: string) {
     try {
       const res = await fetch("/api/cases", {
         method: "DELETE",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: confirmDelete.id }),
+        body: JSON.stringify({ id }),
       });
       if (!res.ok) throw new Error();
       toast.success("Vaka silindi");
-      setConfirmDelete(null);
-      load();
+      await load();
     } catch {
       toast.error("Silme başarısız");
-    } finally {
-      setDeleting(false);
     }
   }
-
-  function formatDate(s: string) {
-    return new Date(s).toLocaleDateString("tr-TR", {
-      day: "numeric",
-      month: "short",
-      year: "numeric",
-    });
-  }
-
-  function getPatientName(id?: string | null) {
-    return patients.find((p) => p.id === id)?.name ?? null;
-  }
-
-  function filterByDate(c: Case) {
-    if (filter === "all") return true;
-    const d = new Date(c.createdAt);
-    const now = new Date();
-    if (filter === "week") {
-      const week = new Date(now.getTime() - 7 * 86400000);
-      return d >= week;
-    }
-    const month = new Date(now.getFullYear(), now.getMonth(), 1);
-    return d >= month;
-  }
-
-  const filtered = cases.filter(
-    (c) =>
-      filterByDate(c) &&
-      (c.title.toLowerCase().includes(search.toLowerCase()) ||
-        c.description.toLowerCase().includes(search.toLowerCase())),
-  );
 
   return (
-    <div className="flex flex-col gap-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center">
-              <ClipboardList
-                size={20}
-                className="text-[var(--color-primary)]"
-              />
+    <div className="space-y-6">
+      <ClinicHero
+        eyebrow="Case Command"
+        title="Vaka çözüm yüzeyi"
+        description="Kısa vaka kartları, hasta bağlamı ve AI destekli klinik reasoning akışını aynı vaka havuzunda topla."
+        icon={ClipboardList}
+        actions={
+          <Button
+            onClick={() => {
+              setEditing(null);
+              setForm({ title: "", description: "", patientId: "" });
+              setShowForm(true);
+            }}
+          >
+            <Plus size={16} />
+            Yeni Vaka
+          </Button>
+        }
+      />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <ClinicStat label="Toplam Vaka" value={cases.length} detail="Kayıtlı vaka senaryoları" />
+        <ClinicStat label="Filtre Sonucu" value={filtered.length} detail="Arama sonrası görünen vakalar" tone="var(--color-secondary)" />
+        <ClinicStat label="Hasta Bağlı" value={cases.filter((item) => item.patientId).length} detail="Hasta ile ilişkili senaryolar" tone="var(--color-warning)" />
+      </div>
+
+      <Card>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <CardTitle className="text-base">Vaka Havuzu</CardTitle>
+          <div className="relative w-full max-w-md">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Vaka veya hasta ara..."
+              className="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] py-3 pl-10 pr-4 text-sm text-[var(--color-text-primary)] outline-none"
+            />
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-4 lg:grid-cols-2">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-48 rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] animate-pulse" />
+            ))
+          ) : filtered.length === 0 ? (
+            <div className="col-span-full rounded-3xl border border-dashed border-[var(--color-border)] px-6 py-12 text-center text-sm text-[var(--color-text-secondary)]">
+              Vaka bulunamadı.
             </div>
-            <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">
-              Vakalarım
-            </h1>
-          </div>
-          <p className="text-[var(--color-text-secondary)]">
-            AI destekli vaka takip sistemi
-          </p>
-        </div>
-        <Button variant="primary" onClick={openCreate}>
-          <Plus size={16} />
-          Yeni Vaka
-        </Button>
-      </div>
-
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="flex gap-1 p-1 bg-[var(--color-surface)] rounded-lg border border-[var(--color-border)]">
-          {(
-            [
-              ["all", "Tümü"],
-              ["week", "Bu Hafta"],
-              ["month", "Bu Ay"],
-            ] as [Filter, string][]
-          ).map(([v, l]) => (
-            <button
-              key={v}
-              onClick={() => setFilter(v)}
-              className={[
-                "px-3 py-1.5 rounded-md text-sm transition-all",
-                filter === v
-                  ? "bg-[var(--color-primary)] text-black font-medium"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
-              ].join(" ")}
-            >
-              {l}
-            </button>
-          ))}
-        </div>
-        <div className="relative flex-1">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Vaka ara..."
-            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg pl-9 pr-4 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-          />
-        </div>
-        <Badge variant="default" className="shrink-0 self-center">
-          {filtered.length} vaka
-        </Badge>
-      </div>
-
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div
-              key={i}
-              className="h-32 rounded-lg bg-[var(--color-surface)] animate-pulse border border-[var(--color-border)]"
-            />
-          ))}
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-20 gap-4">
-          <div className="w-16 h-16 rounded-2xl bg-[var(--color-surface)] border border-[var(--color-border)] flex items-center justify-center">
-            <ClipboardList
-              size={28}
-              className="text-[var(--color-text-secondary)]"
-            />
-          </div>
-          <div className="text-center">
-            <p className="text-[var(--color-text-primary)] font-medium text-lg">
-              {search ? "Sonuç bulunamadı" : "Henüz vaka kaydı yok"}
-            </p>
-            <p className="text-[var(--color-text-secondary)] text-sm mt-1">
-              Vakalarınızı kaydedin ve AI ile analiz edin
-            </p>
-          </div>
-          {!search && (
-            <Button variant="primary" onClick={openCreate}>
-              <Plus size={16} />
-              Vaka Ekle
-            </Button>
-          )}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-3">
-          {filtered.map((c) => {
-            const patientName = getPatientName(c.patientId);
-            return (
-              <div
-                key={c.id}
-                className="flex gap-0 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] hover:border-[var(--color-primary)]/40 transition-all overflow-hidden group"
-              >
-                <div className="w-1 bg-[var(--color-primary)] shrink-0" />
-                <div className="flex-1 p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <h3 className="font-semibold text-[var(--color-text-primary)] mb-1.5">
-                        {c.title}
-                      </h3>
-                      <p className="text-sm text-[var(--color-text-secondary)] line-clamp-2 leading-relaxed">
-                        {c.description}
-                      </p>
-                    </div>
-                    <div className="flex gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        onClick={() => openEdit(c)}
-                        className="p-1.5 rounded-md hover:bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-                      >
-                        <Edit2 size={14} />
-                      </button>
-                      <button
-                        onClick={() => setConfirmDelete(c)}
-                        className="p-1.5 rounded-md hover:bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:text-[var(--color-destructive)] transition-colors"
-                      >
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-3 mt-3">
-                    {patientName && (
-                      <div className="flex items-center gap-1.5">
-                        <User
-                          size={11}
-                          className="text-[var(--color-text-secondary)]"
-                        />
-                        <Badge variant="default" className="text-xs">
-                          {patientName}
-                        </Badge>
-                      </div>
-                    )}
-                    <div className="flex items-center gap-1.5 ml-auto">
-                      <Calendar
-                        size={11}
-                        className="text-[var(--color-text-secondary)]"
-                      />
-                      <span className="text-xs text-[var(--color-text-secondary)]">
-                        {formatDate(c.createdAt)}
-                      </span>
-                    </div>
-                  </div>
+          ) : (
+            filtered.map((item) => (
+              <div key={item.id} className="rounded-3xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-5">
+                <p className="text-lg font-semibold text-[var(--color-text-primary)]">{item.title}</p>
+                <p className="mt-2 line-clamp-4 text-sm leading-7 text-[var(--color-text-secondary)]">{item.description}</p>
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-[var(--color-text-secondary)]">
+                  <span className="rounded-full border border-[var(--color-border)] px-2 py-1">
+                    {item.patient?.name ?? "Bağımsız vaka"}
+                  </span>
+                  <span>{new Intl.DateTimeFormat("tr-TR", { day: "2-digit", month: "short" }).format(new Date(item.createdAt))}</span>
+                </div>
+                <div className="mt-5 flex gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="flex-1"
+                    onClick={() => {
+                      setEditing(item);
+                      setForm({
+                        title: item.title,
+                        description: item.description,
+                        patientId: item.patientId ?? "",
+                      });
+                      setShowForm(true);
+                    }}
+                  >
+                    <UserRoundPen size={14} />
+                    Düzenle
+                  </Button>
+                  <Button variant="ghost" size="sm" className="flex-1 hover:text-[var(--color-destructive)]" onClick={() => void remove(item.id)}>
+                    <Trash2 size={14} />
+                    Sil
+                  </Button>
                 </div>
               </div>
-            );
-          })}
+            ))
+          )}
         </div>
-      )}
+      </Card>
 
-      {showForm && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--color-surface-elevated)] rounded-xl p-6 w-full max-w-lg border border-[var(--color-border)]">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-bold text-[var(--color-text-primary)]">
-                {editing ? "Vakayı Düzenle" : "Yeni Vaka Oluştur"}
-              </h2>
-              <button
-                onClick={() => setShowForm(false)}
-                className="text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)] transition-colors"
-              >
-                <X size={20} />
-              </button>
-            </div>
-            <div className="flex flex-col gap-4">
-              <Input
-                label="Vaka Başlığı"
-                value={form.title}
-                onChange={(e) =>
-                  setForm((f) => ({ ...f, title: e.target.value }))
-                }
-                placeholder="Kısa ve açıklayıcı başlık"
-              />
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                  Vaka Açıklaması
-                </label>
-                <textarea
-                  value={form.description}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, description: e.target.value }))
-                  }
-                  placeholder="Vakanın detaylı açıklaması..."
-                  rows={4}
-                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] resize-none transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-[var(--color-text-primary)] mb-1.5">
-                  Bağlı Hasta (İsteğe Bağlı)
-                </label>
-                <select
-                  value={form.patientId}
-                  onChange={(e) =>
-                    setForm((f) => ({ ...f, patientId: e.target.value }))
-                  }
-                  className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg px-3 py-2.5 text-sm text-[var(--color-text-primary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-                >
-                  <option value="">Hasta seçin (isteğe bağlı)</option>
-                  {patients.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="flex gap-3 pt-2">
-                <Button
-                  variant="ghost"
-                  onClick={() => setShowForm(false)}
-                  className="flex-1"
-                >
-                  İptal
-                </Button>
-                <Button
-                  variant="primary"
-                  loading={saving}
-                  onClick={save}
-                  className="flex-1"
-                >
-                  Kaydet
-                </Button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--color-surface-elevated)] rounded-xl p-6 w-full max-w-sm border border-[var(--color-border)]">
-            <h2 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
-              Vakayı Sil
+      {showForm ? (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="glass-panel w-full max-w-2xl rounded-3xl p-6">
+            <h2 className="text-xl font-semibold text-[var(--color-text-primary)]">
+              {editing ? "Vakayı düzenle" : "Yeni vaka oluştur"}
             </h2>
-            <p className="text-[var(--color-text-secondary)] text-sm mb-6">
-              <span className="text-[var(--color-text-primary)] font-medium">
-                &ldquo;{confirmDelete.title}&rdquo;
-              </span>{" "}
-              adlı vakayı silmek istediğinizden emin misiniz?
-            </p>
-            <div className="flex gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1"
+            <div className="mt-5 space-y-4">
+              <input
+                value={form.title}
+                onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
+                placeholder="Vaka başlığı"
+                className="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-[var(--color-text-primary)] outline-none"
+              />
+              <textarea
+                value={form.description}
+                onChange={(e) => setForm((prev) => ({ ...prev, description: e.target.value }))}
+                placeholder="Klinik tablo, öykü, muayene ve kritik ipuçları"
+                className="min-h-[180px] w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-[var(--color-text-primary)] outline-none"
+              />
+              <select
+                value={form.patientId}
+                onChange={(e) => setForm((prev) => ({ ...prev, patientId: e.target.value }))}
+                className="w-full rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3 text-[var(--color-text-primary)] outline-none"
               >
-                İptal
+                <option value="">Hasta bağlama (opsiyonel)</option>
+                {patients.map((patient) => (
+                  <option key={patient.id} value={patient.id}>
+                    {patient.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="mt-5 flex justify-end gap-3">
+              <Button variant="ghost" onClick={() => setShowForm(false)}>
+                Vazgeç
               </Button>
-              <Button
-                variant="destructive"
-                loading={deleting}
-                onClick={deleteCase}
-                className="flex-1"
-              >
-                Sil
+              <Button onClick={() => void save()} loading={saving}>
+                Kaydet
               </Button>
             </div>
           </div>
         </div>
-      )}
+      ) : null}
     </div>
   );
 }

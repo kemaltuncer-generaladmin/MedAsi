@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "sh -c 'export DIRECT_URL=\"${DIRECT_URL:-$DATABASE_URL}\"; prisma migrate resolve --rolled-back 20260410120000_add_missing_rag_rpc_functions >/dev/null 2>&1 || true; prisma migrate deploy || echo \"[build] prisma migrate deploy skipped\"; next build'",
+    "build": "sh -c 'if [ -n \"$DIRECT_URL\" ] || [ -n \"$DATABASE_URL\" ]; then export DIRECT_URL=\"${DIRECT_URL:-$DATABASE_URL}\"; fi; export NODE_OPTIONS=\"${NODE_OPTIONS:---max-old-space-size=4096}\"; prisma migrate resolve --rolled-back 20260410120000_add_missing_rag_rpc_functions >/dev/null 2>&1 || true; prisma migrate deploy || echo \"[build] prisma migrate deploy skipped\"; next build'",
     "start": "next start",
     "lint": "eslint . --ext .js,.jsx,.ts,.tsx --cache",
     "typecheck": "tsc --noEmit",

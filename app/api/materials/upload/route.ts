@@ -4,6 +4,7 @@ import {
   createMaterial,
   getManagedMaterialPaths,
   processMaterial,
+  updateMaterial,
   updateMaterialDriveArtifacts,
 } from "@/lib/rag/user-materials";
 import { prisma } from "@/lib/prisma";
@@ -16,7 +17,12 @@ import {
   uploadBinaryToDriveFolder,
   writeTextFileToDriveFolder,
 } from "@/lib/gdrive/service-account";
-import { generateMaterialSummary } from "@/lib/ai/material-agent";
+import { generateMaterialQualityReport, generateMaterialSummary } from "@/lib/ai/material-agent";
+import {
+  recordMaterialProcessingEvent,
+  saveMaterialAnalysis,
+  updateMaterialStudyMetadata,
+} from "@/lib/study/core";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120; // Processing can take time
@@ -140,10 +146,22 @@ export async function POST(req: NextRequest) {
     branch,
     managedDriveFileId: sourceUpload?.fileId,
   });
+  await updateMaterialStudyMetadata(materialId, { processingStage: "queued" }).catch(() => {});
+  await recordMaterialProcessingEvent(user.id, materialId, "queued", "completed", "Materyal kuyruğa alındı.", {
+    type: ext,
+    branch,
+  }).catch(() => {});
 
   // Arka planda işle (response hemen dön)
+  await updateMaterialStudyMetadata(materialId, { processingStage: "extracting" }).catch(() => {});
+  await recordMaterialProcessingEvent(user.id, materialId, "extracting", "started", "Dosya metni çıkarılıyor.").catch(() => {});
   processMaterial(user.id, materialId, file.name.replace(/\.[^.]+$/, ""), ext, branch, buffer)
     .then(async (result) => {
+      await recordMaterialProcessingEvent(user.id, materialId, "embedding", "completed", "Materyal embedding tamamlandı.", {
+        chunkCount: result.chunkCount,
+        pageCount: result.pageCount ?? null,
+      }).catch(() => {});
+
       createSystemLog({
         level: "info",
         category: "materials",
@@ -157,6 +175,33 @@ export async function POST(req: NextRequest) {
         branch,
         text: result.extractedText ?? "",
       }).catch(() => "Ozet olusturulamadi.");
+
+      await updateMaterial(materialId, "processing", result.chunkCount, result.pageCount, undefined, "analyzing")
+        .catch(() => {});
+      await recordMaterialProcessingEvent(user.id, materialId, "analyzing", "started", "Kalite analizi başlatıldı.").catch(() => {});
+
+      const { report, slides } = generateMaterialQualityReport({
+        title: persistedName,
+        branch,
+        text: result.extractedText ?? "",
+        pageCount: result.pageCount,
+      });
+
+      await saveMaterialAnalysis(user.id, materialId, report, slides).catch((error) => {
+        console.error("Material analysis save error:", error);
+      });
+      await updateMaterialStudyMetadata(materialId, {
+        processingStage: "ready",
+        qualityScore: report.qualityScore,
+        extractionConfidence: report.extractionConfidence,
+        slideCount: report.slideCount,
+        readyForQuestions: report.questionReadiness >= 60,
+        readyForFlashcards: report.flashcardReadiness >= 60,
+      }).catch(() => {});
+      await recordMaterialProcessingEvent(user.id, materialId, "analyzing", "completed", "Kalite analizi tamamlandı.", {
+        qualityScore: report.qualityScore,
+        slideCount: report.slideCount,
+      }).catch(() => {});
 
       if (workspace && sourceUpload) {
         const summaryFile = await writeTextFileToDriveFolder({
@@ -184,6 +229,14 @@ export async function POST(req: NextRequest) {
     })
     .catch((err) => {
       console.error("Material processing error:", err);
+      void updateMaterial(materialId, "failed", 0, undefined, err instanceof Error ? err.message : String(err), "failed").catch(() => {});
+      void recordMaterialProcessingEvent(
+        user.id,
+        materialId,
+        "embedding",
+        "failed",
+        err instanceof Error ? err.message : "Materyal işleme hatası",
+      ).catch(() => {});
     });
 
   return NextResponse.json({
@@ -191,6 +244,10 @@ export async function POST(req: NextRequest) {
     materialId,
     name: file.name,
     status: "processing",
+    job: {
+      materialId,
+      stage: "queued",
+    },
     managedDrive: managedPaths,
     message: "Dosya inbox klasorune yüklendi, işleniyor...",
   });

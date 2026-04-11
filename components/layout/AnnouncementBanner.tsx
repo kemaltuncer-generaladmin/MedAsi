@@ -23,7 +23,9 @@ function addDismissed(id: string): void {
     if (!current.includes(id)) {
       localStorage.setItem(DISMISSED_KEY, JSON.stringify([...current, id]));
     }
-  } catch {}
+  } catch {
+    // localStorage bazı ortamlarda erişilemez olabilir.
+  }
 }
 
 const typeConfig = {

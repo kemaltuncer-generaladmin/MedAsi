@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 import { prisma } from '@/lib/prisma';
+import { consumeQuestionBankQuota } from "@/lib/access/entitlements";
+import { rememberQuestionBankResults } from "@/lib/ai/personalization";
 
 export async function POST(req: NextRequest) {
   try {
@@ -15,6 +17,25 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Invalid data' }, { status: 400 });
     }
 
+    const quota = await consumeQuestionBankQuota(user.id, results.length);
+    if (!quota.ok) {
+      return NextResponse.json(
+        {
+          error:
+            quota.code === "question_limit_reached"
+              ? "Aylık soru bankası limitinize ulaştınız."
+              : "Paketiniz soru bankası kullanımına uygun değil.",
+          code: quota.code,
+          usage: {
+            used: quota.used,
+            limit: quota.limit,
+            remaining: quota.remaining,
+          },
+        },
+        { status: 403 },
+      );
+    }
+
     // 1. Tüm soru denemelerini DB'ye toplu kaydet
     await prisma.questionAttempt.createMany({
       data: results.map((r: any) => ({
@@ -25,6 +46,11 @@ export async function POST(req: NextRequest) {
         isCorrect: r.isCorrect,
       }))
     });
+
+    void rememberQuestionBankResults({
+      userId: user.id,
+      results,
+    }).catch(() => {});
 
     // 2. AI analizini arka planda başlat
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';

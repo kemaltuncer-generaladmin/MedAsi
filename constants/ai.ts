@@ -1,7 +1,7 @@
 import type { AIModel } from "@/types";
 
 export const AI_MODEL_MAP: Record<AIModel, string> = {
-  FAST: "gemini-2.5-flash",
+  FAST: "gemini-2.5-pro",
   EFFICIENT: "gemini-2.5-flash",
 };
 

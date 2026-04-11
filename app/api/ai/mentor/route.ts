@@ -4,7 +4,14 @@ import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
 import { checkAndLogAiUsage, logAIUsage } from "@/lib/ai/check-limit";
 import { appendCentralSystemPrompt, createCentralAiRuntime } from "@/lib/ai/orchestrator";
+import { withCentralAiRuntimeFailover } from "@/lib/ai/failover";
 import { recordAiUsageTelemetry } from "@/lib/ai/telemetry";
+import { canAccessModule } from "@/lib/access/entitlements";
+import { geminiErrorToResponsePayload, isGeminiErrorLike } from "@/lib/ai/google-errors";
+import { rememberUserSignals } from "@/lib/ai/personalization";
+import { getAiRefusalMessage } from "@/lib/ai/access";
+import { createSystemLog } from "@/lib/system-log";
+import { maskGeminiEnvName } from "@/lib/ai/env";
 import {
   sanitizeContextText,
   sanitizeHistory,
@@ -37,6 +44,12 @@ export async function POST(req: NextRequest) {
   if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
+  if (!(await canAccessModule(user.id, "ai"))) {
+    return NextResponse.json(
+      { error: getAiRefusalMessage("package_blocked"), reason: "package_blocked" },
+      { status: 403 },
+    );
+  }
   const aiRuntime = await createCentralAiRuntime({
     moduleName: "mentor",
     requestedModel: "EFFICIENT",
@@ -57,7 +70,10 @@ export async function POST(req: NextRequest) {
   // Limit kontrolü
   const limitCheck = await checkAndLogAiUsage();
   if (!limitCheck.canProceed) {
-    return NextResponse.json({ error: "limit_exceeded" }, { status: 429 });
+    return NextResponse.json(
+      { error: getAiRefusalMessage(limitCheck.reason), reason: limitCheck.reason },
+      { status: 403 },
+    );
   }
 
   // Kullanıcı profili bağlamı
@@ -85,17 +101,57 @@ export async function POST(req: NextRequest) {
   let outputTokens = 0;
 
   try {
-    const result = await generateText({
-      model: aiRuntime.model,
-      system: systemWithProfile,
-      messages,
-      temperature: aiRuntime.temperature,
-      maxOutputTokens: aiRuntime.maxOutputTokens,
-    });
+    const runtimeResult = await withCentralAiRuntimeFailover(
+      {
+        moduleName: "mentor",
+        requestedModel: "EFFICIENT",
+        requestedMaxOutputTokens: 450,
+      },
+      async (runtime) =>
+        generateText({
+          model: runtime.model,
+          system: systemWithProfile,
+          messages,
+          temperature: runtime.temperature,
+          maxOutputTokens: runtime.maxOutputTokens,
+        }),
+    );
+    const activeRuntime = runtimeResult.runtime;
+    if (runtimeResult.retried) {
+      await createSystemLog({
+        level: "warn",
+        category: "ai",
+        message: "Mentor AI key failover uygulandı",
+        details:
+          `module=mentor | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+          `key=${maskGeminiEnvName(activeRuntime.keyName)} (${activeRuntime.keySource ?? "unknown"})`,
+        userId: user.id,
+      }).catch(() => {});
+    }
+    const result = runtimeResult.value;
     responseText = result.text;
     inputTokens = (result.usage as { inputTokens?: number })?.inputTokens ?? 0;
     outputTokens = (result.usage as { outputTokens?: number })?.outputTokens ?? 0;
+    aiRuntime.keyName = activeRuntime.keyName;
+    aiRuntime.keySource = activeRuntime.keySource;
   } catch (err) {
+    if (isGeminiErrorLike(err)) {
+      const geminiError = geminiErrorToResponsePayload(err);
+      await createSystemLog({
+        level: "error",
+        category: "ai",
+        message: `Gemini hatası (${geminiError.reason})`,
+        details:
+          `module=mentor | model=${aiRuntime.modelId} | ` +
+          `key=${maskGeminiEnvName(aiRuntime.keyName)} (${aiRuntime.keySource ?? "unknown"}) | ` +
+          `reason=${geminiError.reason}`,
+        userId: user.id,
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: geminiError.message, reason: geminiError.reason },
+        { status: geminiError.status },
+      );
+    }
     return NextResponse.json({ error: "AI isteği başarısız" }, { status: 500 });
   }
 
@@ -108,6 +164,7 @@ export async function POST(req: NextRequest) {
     userId: user.id,
     route: "/api/ai/mentor",
     model: aiRuntime.modelId,
+    keyName: aiRuntime.keyName,
     inputTokens,
     outputTokens,
     module: "mentor",
@@ -122,21 +179,34 @@ export async function POST(req: NextRequest) {
   if (insightMatch) {
     try {
       const insight = JSON.parse(insightMatch[1]);
-      await prisma.studentLearningProfile.upsert({
-        where: { userId: user.id },
-        create: {
-          userId: user.id,
-          motivationScore: insight.motivationScore ?? null,
-          mentorInsights: insight,
-          lastMentorChatAt: new Date(),
-        },
-        update: {
-          motivationScore: insight.motivationScore ?? undefined,
-          mentorInsights: insight,
-          lastMentorChatAt: new Date(),
+      await rememberUserSignals({
+        userId: user.id,
+        moduleName: "mentor",
+        userMessage: message,
+        assistantText: cleanResponse,
+        insight: {
+          studyFocus: Array.isArray(insight.studyFocus) ? insight.studyFocus : [],
+          motivationScore: typeof insight.motivationScore === "number" ? insight.motivationScore : null,
+          keyObservation: typeof insight.keyObservation === "string" ? insight.keyObservation : null,
+          summary: typeof insight.keyObservation === "string" ? insight.keyObservation : null,
+          mentorPayload: typeof insight === "object" && insight ? insight : null,
         },
       });
-    } catch {}
+    } catch {
+      void rememberUserSignals({
+        userId: user.id,
+        moduleName: "mentor",
+        userMessage: message,
+        assistantText: cleanResponse,
+      }).catch(() => {});
+    }
+  } else {
+    void rememberUserSignals({
+      userId: user.id,
+      moduleName: "mentor",
+      userMessage: message,
+      assistantText: cleanResponse,
+    }).catch(() => {});
   }
 
   return NextResponse.json({ text: cleanResponse });

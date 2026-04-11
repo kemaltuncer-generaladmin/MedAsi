@@ -2,6 +2,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { createClient } from "@/lib/supabase/server";
+import { upsertUserAcademicProfile } from "@/lib/community/service";
 
 export async function completeOnboarding(data: {
   studyLevel: string;
@@ -10,6 +11,10 @@ export async function completeOnboarding(data: {
   preferredStudyTime: string;
   tusExamDate?: string;
   communicationStyle?: string;
+  universityId?: string;
+  programId?: string;
+  termId?: string;
+  specialty?: string;
 }) {
   try {
     const supabase = await createClient();
@@ -37,6 +42,15 @@ export async function completeOnboarding(data: {
         },
       },
     });
+
+    if (data.universityId || data.programId || data.termId || data.specialty) {
+      await upsertUserAcademicProfile(user.id, {
+        universityId: data.universityId ?? null,
+        programId: data.programId ?? null,
+        termId: data.termId ?? null,
+        specialty: data.specialty ?? null,
+      });
+    }
 
     return { success: true };
   } catch {

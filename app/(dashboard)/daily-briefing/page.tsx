@@ -1,139 +1,115 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { Card, CardTitle } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  Newspaper,
-  Target,
-  CheckCircle,
-  Circle,
-  TrendingUp,
-  Lightbulb,
   Activity,
-  Sparkles,
-  Loader2,
+  ArrowRight,
   Brain,
+  CheckCircle2,
+  Loader2,
+  Sparkles,
+  Target,
+  TriangleAlert,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardTitle } from "@/components/ui/Card";
+import { getStoredBriefing, getTodayKey, saveStoredBriefing } from "@/lib/ai/client-memory";
 
 type DailyGoal = { id: string; text: string; done: boolean };
-type DailyGoalsSnapshot = { date: string; goals: DailyGoal[] };
+type UsageData = {
+  dailyLimit: number;
+  dailyUsed: number;
+  monthlyUsed: number;
+  modelUsage: { fast: number; efficient: number };
+};
+type HistoryEntry = { id: string; module: string; createdAt: string };
 
 const DEFAULT_GOALS: DailyGoal[] = [
-  { id: "goal-1", text: "Bugün 25 dk odaklanmış çalış (Pomodoro)", done: false },
-  { id: "goal-2", text: "AI ile en az 1 konu pekiştir", done: false },
-  { id: "goal-3", text: "Zayıf alanında 5 soru çöz", done: false },
+  { id: "goal-1", text: "Bir zayıf alanı 25 dakikalık blokla temizle", done: false },
+  { id: "goal-2", text: "AI ile bir konuyu not veya karta dönüştür", done: false },
+  { id: "goal-3", text: "Bugün en az 5 soru ile hatayı görünür kıl", done: false },
 ];
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+function normalizeGoals(value: unknown): DailyGoal[] {
+  if (!Array.isArray(value)) return DEFAULT_GOALS.map((goal) => ({ ...goal }));
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== "object") return null;
+      const candidate = item as { id?: unknown; text?: unknown; done?: unknown };
+      if (typeof candidate.text !== "string" || !candidate.text.trim()) return null;
+      return {
+        id: typeof candidate.id === "string" ? candidate.id : `goal-${index + 1}`,
+        text: candidate.text.trim(),
+        done: Boolean(candidate.done),
+      };
+    })
+    .filter((item): item is DailyGoal => item !== null);
 }
 
-function cloneDefaultGoals(): DailyGoal[] {
-  return DEFAULT_GOALS.map((goal) => ({ ...goal }));
-}
+function splitBriefingSections(text: string) {
+  const lines = text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-function normalizeGoalItem(value: unknown, index: number): DailyGoal | null {
-  if (typeof value === "string") {
-    const text = value.trim();
-    if (!text) return null;
-    return { id: `legacy-goal-${index + 1}`, text, done: false };
-  }
-
-  if (!isRecord(value)) return null;
-
-  const text = typeof value.text === "string" ? value.text.trim() : "";
-  if (!text) return null;
+  const defaults = [
+    "Bugünün odağı için tek bir zayıf alan seç ve önce onu temizle.",
+    "En büyük risk dikkat dağınıklığı ve plansız tekrar döngüsü.",
+    "Mikro kazanım için 25 dakikalık blok + 5 soru yeterli.",
+    "Sonraki en iyi adım briefing sonrası doğrudan odak oturumuna geçmek.",
+  ];
 
   return {
-    id: typeof value.id === "string" && value.id.trim() ? value.id.trim() : `goal-${index + 1}`,
-    text,
-    done: Boolean(value.done),
-  };
-}
-
-function normalizeDailyGoals(value: unknown): DailyGoalsSnapshot {
-  const todayKey = new Intl.DateTimeFormat("en-CA", {
-    timeZone: "Europe/Istanbul",
-  }).format(new Date());
-
-  if (Array.isArray(value)) {
-    return {
-      date: todayKey,
-      goals: value
-        .map((item, index) => normalizeGoalItem(item, index))
-        .filter((item): item is DailyGoal => item !== null),
-    };
-  }
-
-  if (isRecord(value)) {
-    const date = typeof value.date === "string" ? value.date : todayKey;
-    const rawGoals = Array.isArray(value.goals) ? value.goals : [];
-    return {
-      date,
-      goals: rawGoals
-        .map((item, index) => normalizeGoalItem(item, index))
-        .filter((item): item is DailyGoal => item !== null),
-    };
-  }
-
-  return {
-    date: todayKey,
-    goals: cloneDefaultGoals(),
+    focus: lines[0] ?? defaults[0],
+    risk: lines[1] ?? defaults[1],
+    microWin: lines[2] ?? defaults[2],
+    nextStep: lines[3] ?? defaults[3],
   };
 }
 
 export default function DailyBriefingPage() {
   const [loading, setLoading] = useState(false);
-  const [aiData, setAiData] = useState<string | null>(null);
-  const [goals, setGoals] = useState<DailyGoal[]>(cloneDefaultGoals());
+  const [briefing, setBriefing] = useState<string>("");
+  const [goals, setGoals] = useState<DailyGoal[]>(DEFAULT_GOALS.map((goal) => ({ ...goal })));
+  const [usage, setUsage] = useState<UsageData | null>(null);
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+
+  const todayKey = getTodayKey();
 
   useEffect(() => {
-    async function loadGoals() {
-      try {
-        const res = await fetch("/api/dashboard/goals");
-        if (!res.ok) throw new Error("Goals load failed");
-        const data = await res.json();
-        setGoals(normalizeDailyGoals(data).goals);
-      } catch {
-        setGoals(cloneDefaultGoals());
-      }
+    const stored = getStoredBriefing();
+    if (stored?.date === todayKey) {
+      setBriefing(stored.content);
+      setGoals(normalizeGoals(stored.goals));
     }
 
-    void loadGoals();
-  }, []);
+    void Promise.all([
+      fetch("/api/dashboard/goals").then((res) => (res.ok ? res.json() : null)),
+      fetch("/api/ai/usage").then((res) => (res.ok ? res.json() : null)),
+      fetch("/api/ai/history?limit=14").then((res) => (res.ok ? res.json() : null)),
+    ]).then(([goalData, usageData, historyData]) => {
+      if (goalData) setGoals(normalizeGoals(goalData.goals ?? goalData));
+      if (usageData) setUsage(usageData as UsageData);
+      if (historyData?.history) setHistory(historyData.history as HistoryEntry[]);
+    });
+  }, [todayKey]);
 
-  async function generateBriefing() {
-    setLoading(true);
-    try {
-      const res = await fetch("/api/ai/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          message:
-            "Bugün için bana özel bir brifing hazırla. Günaydın mesajı, zayıf alanıma göre odak konusu, 3 kısa hedef ve 1 klinik ipucu ver. Yapıyı başlıklar halinde kur, satırları kısa tut ve 3 paragraftan uzun olma.",
-          model: "EFFICIENT",
-          module: "daily-briefing",
-          maxOutputTokens: 700,
-        }),
-      });
+  const topModule = useMemo(() => {
+    const counts = new Map<string, number>();
+    history.forEach((entry) => counts.set(entry.module, (counts.get(entry.module) ?? 0) + 1));
+    return [...counts.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] ?? "mentor";
+  }, [history]);
 
-      if (!res.ok) throw new Error("Brifing alınamadı.");
-      const data = await res.json();
-      const text = data?.response?.text ?? data?.text ?? "";
-      if (!text) throw new Error("Brifing alınamadı.");
-      setAiData(text);
-    } catch {
-      toast.error("Sabah raporu şu an hazırlanamadı.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  const toggleGoal = async (index: number) => {
-    const nextGoals = goals.map((goal, i) => (i === index ? { ...goal, done: !goal.done } : goal));
+  async function persistGoals(nextGoals: DailyGoal[]) {
     setGoals(nextGoals);
+    saveStoredBriefing({
+      date: todayKey,
+      content: briefing,
+      goals: nextGoals,
+      focusLabel: topModule,
+    });
 
     try {
       const res = await fetch("/api/dashboard/goals", {
@@ -141,129 +117,222 @@ export default function DailyBriefingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ goals: nextGoals }),
       });
-
       if (!res.ok) throw new Error("Goals save failed");
-      const data = await res.json();
-      setGoals(normalizeDailyGoals(data).goals);
     } catch {
-      toast.error("Hedef güncellenemedi.");
+      toast.error("Hedefler kaydedilirken sorun oluştu.");
     }
-  };
+  }
 
-  const doneCount = goals.filter((goal) => goal.done).length;
+  const generateBriefing = useCallback(async (force = false) => {
+    if (loading) return;
+    if (!force && briefing) return;
+
+    setLoading(true);
+    try {
+      const res = await fetch("/api/ai/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: [
+            "Bugün için premium bir kişisel briefing üret.",
+            "Yalnızca dört kısa satır döndür.",
+            "Satır sırası: Bugünün Odağı / En Büyük Risk / Mikro Kazanım / Sonraki En İyi Adım.",
+            "Tıp öğrencisi veya genç hekim tonuna uygun yaz.",
+            "Odak, tekrar ve klinik karar desteğini birleştir.",
+          ].join("\n"),
+          model: "EFFICIENT",
+          module: "daily-briefing",
+          maxOutputTokens: 500,
+        }),
+      });
+
+      if (!res.ok) throw new Error("Brifing alınamadı.");
+      const data = await res.json();
+      const text = String(data?.response?.text ?? data?.text ?? "").trim();
+      if (!text) throw new Error("Boş briefing");
+      setBriefing(text);
+      saveStoredBriefing({
+        date: todayKey,
+        content: text,
+        goals,
+        focusLabel: topModule,
+      });
+    } catch {
+      toast.error("Günlük briefing şu an üretilemedi.");
+    } finally {
+      setLoading(false);
+    }
+  }, [briefing, goals, loading, todayKey, topModule]);
+
+  useEffect(() => {
+    if (!briefing) {
+      void generateBriefing(false);
+    }
+  }, [briefing, generateBriefing]);
+
+  const sections = splitBriefingSections(briefing);
+  const completedGoals = goals.filter((goal) => goal.done).length;
+  const weeklyBars = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"].map((label) => {
+    const count = history.filter((entry) => {
+      const day = new Date(entry.createdAt).getDay();
+      const normalized = day === 0 ? 6 : day - 1;
+      return ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"][normalized] === label;
+    }).length;
+    return { label, count };
+  });
+  const maxBar = Math.max(1, ...weeklyBars.map((bar) => bar.count));
 
   return (
-    <div className="flex flex-col gap-6 max-w-5xl mx-auto">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center">
-              <Newspaper size={20} className="text-[var(--color-primary)]" />
+    <div className="grid gap-6 xl:grid-cols-[minmax(0,1.35fr)_360px]">
+      <div className="space-y-6">
+        <section className="glass-panel rounded-3xl p-6 md:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-3 py-1 text-[11px] uppercase tracking-[0.2em] text-[var(--color-text-disabled)]">
+                <Sparkles size={14} />
+                Retention Ritual
+              </div>
+              <h1 className="mt-5 text-3xl font-semibold text-[var(--color-text-primary)]">
+                Günlük Brifing
+              </h1>
+              <p className="mt-3 max-w-2xl text-sm leading-7 text-[var(--color-text-secondary)]">
+                Briefing artık tek metin değil; bugünün riskini, mikro kazanımını ve bir sonraki doğru adımı tek akışta verir.
+              </p>
             </div>
-            <h1 className="text-3xl font-bold text-[var(--color-text-primary)]">Günlük Brifing</h1>
+
+            <div className="flex gap-3">
+              <Button variant="secondary" onClick={() => void generateBriefing(true)} disabled={loading}>
+                {loading ? <Loader2 size={16} className="animate-spin" /> : <Activity size={16} />}
+                Yeniden üret
+              </Button>
+              <Link href="/pomodoro">
+                <Button>
+                  <ArrowRight size={16} />
+                  Göreve dönüştür
+                </Button>
+              </Link>
+            </div>
           </div>
-          <p className="text-[var(--color-text-secondary)] text-sm ml-1">
-            Kişisel tıbbi gelişim özetin ve hedeflerin
-          </p>
-        </div>
-        <Button variant="ghost" size="sm" onClick={generateBriefing} disabled={loading}>
-          {loading ? <Loader2 size={14} className="animate-spin" /> : <Activity size={14} />}
-          <span className="ml-2">Güncelle</span>
-        </Button>
+        </section>
+
+        <section className="grid gap-4 md:grid-cols-2">
+          <Card className="min-h-[220px]">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Target size={16} className="text-[var(--color-primary)]" />
+              Bugünün Odağı
+            </CardTitle>
+            <CardContent className="mt-4 text-base leading-8 text-[var(--color-text-primary)]">
+              {sections.focus}
+            </CardContent>
+          </Card>
+
+          <Card className="min-h-[220px]">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <TriangleAlert size={16} className="text-[var(--color-warning)]" />
+              En Büyük Risk
+            </CardTitle>
+            <CardContent className="mt-4 text-base leading-8 text-[var(--color-text-primary)]">
+              {sections.risk}
+            </CardContent>
+          </Card>
+
+          <Card className="min-h-[220px]">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <CheckCircle2 size={16} className="text-[var(--color-success)]" />
+              Mikro Kazanım
+            </CardTitle>
+            <CardContent className="mt-4 text-base leading-8 text-[var(--color-text-primary)]">
+              {sections.microWin}
+            </CardContent>
+          </Card>
+
+          <Card className="min-h-[220px]">
+            <CardTitle className="flex items-center gap-2 text-base">
+              <Brain size={16} className="text-[var(--color-primary)]" />
+              Sonraki En İyi Adım
+            </CardTitle>
+            <CardContent className="mt-4 text-base leading-8 text-[var(--color-text-primary)]">
+              {sections.nextStep}
+            </CardContent>
+          </Card>
+        </section>
+
+        <Card>
+          <CardTitle className="text-base">Bugünün Hedefleri</CardTitle>
+          <div className="mt-5 space-y-3">
+            {goals.map((goal, index) => (
+              <button
+                key={goal.id}
+                type="button"
+                onClick={() => {
+                  const nextGoals = goals.map((item, itemIndex) =>
+                    itemIndex === index ? { ...item, done: !item.done } : item,
+                  );
+                  void persistGoals(nextGoals);
+                }}
+                className="flex w-full items-start gap-3 rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-4 text-left transition-colors hover:bg-[var(--color-surface-elevated)]"
+              >
+                <CheckCircle2
+                  size={18}
+                  className={goal.done ? "text-[var(--color-success)]" : "text-[var(--color-text-disabled)]"}
+                />
+                <span className="text-sm leading-7 text-[var(--color-text-primary)]">{goal.text}</span>
+              </button>
+            ))}
+          </div>
+        </Card>
       </div>
 
-      {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-pulse">
-          <div className="h-64 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)]" />
-          <div className="h-64 bg-[var(--color-surface)] rounded-2xl border border-[var(--color-border)]" />
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="flex flex-col gap-4">
-            <Card variant="elevated" className="relative overflow-hidden border-l-4 border-[var(--color-primary)]">
-              <div className="absolute top-4 right-4 text-[var(--color-primary)]/20">
-                <Sparkles size={48} />
-              </div>
-              <CardTitle className="flex items-center gap-2 mb-4 text-lg">
-                <Brain size={18} className="text-[var(--color-primary)]" />
-                Merkezi Beyin Raporu
-              </CardTitle>
-              <div className="max-h-96 overflow-y-auto pr-2 text-sm leading-7 text-[var(--color-text-secondary)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                {aiData || "Brifingi üretmek için 'Güncelle' butonuna basın."}
-              </div>
-            </Card>
+      <aside className="space-y-6">
+        <Card>
+          <CardTitle className="text-base">Bugün Önerilen Modül</CardTitle>
+          <CardContent className="mt-4">
+            <p className="text-lg font-semibold text-[var(--color-text-primary)]">{topModule}</p>
+            <p className="mt-2 text-sm leading-7">
+              Son AI kullanım paterni bu alan etrafında dönüyor. Brifingi burada aksiyona çevirmek en hızlı kazanımı verir.
+            </p>
+          </CardContent>
+        </Card>
 
-            <Card variant="bordered">
-              <div className="flex items-center justify-between gap-2 mb-4">
-                <div className="flex items-center gap-2">
-                  <Target size={16} className="text-[var(--color-primary)]" />
-                  <CardTitle>Bugünün Hedefleri</CardTitle>
-                </div>
-                <span className="text-xs font-bold text-[var(--color-primary)]">{doneCount}/{goals.length}</span>
+        <Card>
+          <CardTitle className="text-base">7 Günlük AI / Çalışma Pateni</CardTitle>
+          <div className="mt-5 flex items-end gap-3">
+            {weeklyBars.map((bar) => (
+              <div key={bar.label} className="flex flex-1 flex-col items-center gap-2">
+                <div
+                  className="w-full rounded-full bg-[var(--color-primary)]/15"
+                  style={{ height: `${Math.max(16, (bar.count / maxBar) * 120)}px` }}
+                />
+                <span className="text-[11px] text-[var(--color-text-secondary)]">{bar.label}</span>
               </div>
-              <div className="flex flex-col gap-3">
-                {goals.map((goal, index) => (
-                  <button
-                    key={goal.id}
-                    type="button"
-                    onClick={() => void toggleGoal(index)}
-                    className="flex items-start gap-3 cursor-pointer group px-3 py-2 rounded-xl transition-colors hover:bg-[var(--color-surface)] text-left"
-                  >
-                    {goal.done ? (
-                      <CheckCircle size={18} className="text-[var(--color-success)] shrink-0 mt-0.5" />
-                    ) : (
-                      <Circle size={18} className="text-[var(--color-text-secondary)] shrink-0 group-hover:text-[var(--color-primary)] mt-0.5" />
-                    )}
-                    <span
-                      className={`text-sm leading-6 whitespace-normal break-words [overflow-wrap:anywhere] ${goal.done ? "line-through text-[var(--color-text-secondary)]" : "text-[var(--color-text-primary)]"}`}
-                    >
-                      {goal.text}
-                    </span>
-                  </button>
-                ))}
-
-                {goals.length === 0 && (
-                  <div className="rounded-xl border border-dashed border-[var(--color-border)] px-4 py-4 text-sm text-[var(--color-text-secondary)]">
-                    Bugün için henüz hedef yok. Dashboard'dan yeni hedef ekleyebilirsin.
-                  </div>
-                )}
-              </div>
-            </Card>
+            ))}
           </div>
+        </Card>
 
-          <div className="flex flex-col gap-4">
-            <Card variant="bordered">
-              <div className="flex items-center gap-2 mb-4">
-                <TrendingUp size={16} className="text-[var(--color-primary)]" />
-                <CardTitle>Haftalık İlerleme</CardTitle>
-              </div>
-              <div className="h-48 flex items-end gap-2 px-2">
-                {[40, 70, 45, 90, 65, 30, 0].map((val, index) => (
-                  <div key={index} className="flex-1 flex flex-col items-center gap-2">
-                    <div
-                      className="w-full rounded-t-md bg-[var(--color-primary)]/20 border-t-2 border-[var(--color-primary)] transition-all duration-700"
-                      style={{ height: `${val}%` }}
-                    />
-                    <span className="text-[10px] text-[var(--color-text-secondary)]">
-                      {["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"][index]}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </Card>
-
-            <Card variant="bordered" className="bg-gradient-to-br from-[var(--color-primary)]/5 to-transparent">
-              <div className="flex items-center gap-2 mb-2">
-                <Lightbulb size={16} className="text-[var(--color-warning)]" />
-                <span className="text-xs font-bold uppercase tracking-widest text-[var(--color-warning)]">Uzman İpucu</span>
-              </div>
-              <p className="text-sm text-[var(--color-text-primary)] leading-relaxed whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-                "Klinik verilerine göre Farmakoloji başarınız artıyor. Ancak renal doz ayarlamalarında hâlâ %30 hata payınız var. Kreatinin klerensi hesaplamalarını bu hafta rutin haline getirin."
+        <Card>
+          <CardTitle className="text-base">Kullanım Özeti</CardTitle>
+          <div className="mt-5 space-y-3">
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3">
+              <p className="medasi-panel-title">Hedef Tamamlama</p>
+              <p className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
+                {completedGoals}/{goals.length}
               </p>
-            </Card>
+            </div>
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3">
+              <p className="medasi-panel-title">Aylık AI Kullanımı</p>
+              <p className="mt-2 text-2xl font-semibold text-[var(--color-text-primary)]">
+                {usage?.monthlyUsed ?? 0}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] px-4 py-3">
+              <p className="medasi-panel-title">Model Dağılımı</p>
+              <p className="mt-2 text-sm text-[var(--color-text-primary)]">
+                FAST {usage?.modelUsage.fast ?? 0} · EFFICIENT {usage?.modelUsage.efficient ?? 0}
+              </p>
+            </div>
           </div>
-        </div>
-      )}
+        </Card>
+      </aside>
     </div>
   );
 }

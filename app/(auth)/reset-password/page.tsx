@@ -31,7 +31,7 @@ export default function ResetPasswordPage() {
   return (
     <Card
       variant="bordered"
-      className="border-[#1E1E2E] bg-[#0F0F14] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
+      className="border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
     >
       <div className="mb-6 space-y-2">
         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--color-primary)] [font-family:var(--font-mono)]">
@@ -123,7 +123,7 @@ export default function ResetPasswordPage() {
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10"
+                className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10"
               />
             </div>
           </div>
@@ -145,7 +145,7 @@ export default function ResetPasswordPage() {
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 error={!passwordsMatch ? "Şifreler eşleşmiyor" : undefined}
-                className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10"
+                className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10"
               />
             </div>
           </div>
@@ -153,7 +153,7 @@ export default function ResetPasswordPage() {
           <Button
             type="submit"
             disabled={isPending || !passwordsMatch}
-            className="w-full h-11 rounded-[4px]"
+            className="w-full h-11 rounded"
           >
             {isPending ? (
               <>

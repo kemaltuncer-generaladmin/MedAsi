@@ -24,7 +24,7 @@ export function DischargeForm({ patientId, onSaved }: DischargeFormProps) {
     formState: { errors, isSubmitting },
     reset,
   } = useForm<DischargeInput>({
-    resolver: zodResolver(dischargeSchema) as any,
+    resolver: zodResolver(dischargeSchema),
     defaultValues: {
       patientId,
       summary: "",

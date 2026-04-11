@@ -15,7 +15,10 @@ export async function POST(req: NextRequest) {
   const purchasesEnabled = process.env.WALLET_PURCHASES_ENABLED === "true";
   if (!purchasesEnabled) {
     return NextResponse.json(
-      { error: "Satın alma geçici olarak kapalı." },
+      {
+        error: "Satın alma bakım/kapalı modda.",
+        reason: "purchase_disabled_maintenance",
+      },
       { status: 503 },
     );
   }

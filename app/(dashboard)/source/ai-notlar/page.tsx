@@ -97,7 +97,7 @@ export default function AiNotlarPage() {
         body: JSON.stringify({
           message: `${topicInput} konusunda yüklediğim materyallere dayanarak kapsamlı bir ders notu oluştur. Seçili materyaller: ${selectedNames}`,
           model: "EFFICIENT",
-          module: "ai-notlar",
+          module: "source-ai-notlar",
         }),
       });
       const data = await res.json();

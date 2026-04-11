@@ -1,10 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { streamText, generateText } from "ai";
 import { createClient } from "@/lib/supabase/server";
-import { logAIUsage } from "@/lib/ai/check-limit";
+import { checkAndLogAiUsage, logAIUsage } from "@/lib/ai/check-limit";
 import { createSystemLog } from "@/lib/system-log";
 import { getUserMaterialReport } from "@/lib/ai/resource-agent";
 import { recordAiUsageTelemetry } from "@/lib/ai/telemetry";
+import { canAccessModule } from "@/lib/access/entitlements";
 import {
   AI_LIMITS,
   sanitizeContextText,
@@ -12,6 +13,11 @@ import {
   sanitizeUserMessage,
 } from "@/lib/ai/limits";
 import { appendCentralSystemPrompt, createCentralAiRuntime } from "@/lib/ai/orchestrator";
+import { withCentralAiRuntimeFailover } from "@/lib/ai/failover";
+import { geminiErrorToResponsePayload, isGeminiErrorLike } from "@/lib/ai/google-errors";
+import { rememberUserSignals } from "@/lib/ai/personalization";
+import { getAiRefusalMessage } from "@/lib/ai/access";
+import { maskGeminiEnvName } from "@/lib/ai/env";
 
 // Next.js route timeout (saniye) — Gemini yanıtları için yeterli süre
 export const maxDuration = 60;
@@ -151,6 +157,20 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Oturum açmanız gerekiyor." }, { status: 401 });
     }
 
+    if (!(await canAccessModule(user.id, "exams"))) {
+      return NextResponse.json(
+        { error: "Bu sınav modülü paketinizde yer almıyor." },
+        { status: 403 },
+      );
+    }
+    const limitResult = await checkAndLogAiUsage();
+    if (!limitResult.canProceed) {
+      return NextResponse.json(
+        { error: getAiRefusalMessage(limitResult.reason), reason: limitResult.reason },
+        { status: 403 },
+      );
+    }
+
     const body: OsceRequestBody = await req.json();
 
     // ── 1. VAKA ÜRET ──────────────────────────────────────────────────────────
@@ -175,22 +195,44 @@ export async function POST(req: NextRequest) {
         return NextResponse.json({ error: "global_ai_disabled" }, { status: 403 });
       }
 
-      const result = await generateText({
-        model: aiRuntime.model,
-        system: appendCentralSystemPrompt(
-          CASE_GENERATOR_PROMPT +
-          (matContext
-            ? `\n\nKULLANICI MATERYALLERİ (referans al):\n${sanitizeContextText(
-                matContext,
-                600,
-              )}`
-            : ""),
-          aiRuntime.settings,
-        ),
-        prompt: `Yeni OSCE vakası üret.${hints ? " " + hints + "." : ""} JSON only.`,
-        temperature: aiRuntime.temperature,
-        maxOutputTokens: aiRuntime.maxOutputTokens,
-      });
+      const systemText = appendCentralSystemPrompt(
+        CASE_GENERATOR_PROMPT +
+        (matContext
+          ? `\n\nKULLANICI MATERYALLERİ (referans al):\n${sanitizeContextText(
+              matContext,
+              600,
+            )}`
+          : ""),
+        aiRuntime.settings,
+      );
+      const runtimeResult = await withCentralAiRuntimeFailover(
+        {
+          moduleName: "osce-generate",
+          requestedModel: "EFFICIENT",
+          requestedMaxOutputTokens: 900,
+        },
+        async (runtime) =>
+          generateText({
+            model: runtime.model,
+            system: systemText,
+            prompt: `Yeni OSCE vakası üret.${hints ? " " + hints + "." : ""} JSON only.`,
+            temperature: runtime.temperature,
+            maxOutputTokens: runtime.maxOutputTokens,
+          }),
+      );
+      const activeRuntime = runtimeResult.runtime;
+      if (runtimeResult.retried) {
+        await createSystemLog({
+          level: "warn",
+          category: "ai",
+          message: "OSCE case-generation key failover uygulandı",
+          details:
+            `module=osce-generate | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+            `key=${maskGeminiEnvName(activeRuntime.keyName)} (${activeRuntime.keySource ?? "unknown"})`,
+          userId: user.id,
+        }).catch(() => {});
+      }
+      const result = runtimeResult.value;
 
       let caseData: OsceCase;
       try {
@@ -210,15 +252,22 @@ export async function POST(req: NextRequest) {
       const inputTokens = result.usage?.inputTokens ?? 0;
       const outputTokens = result.usage?.outputTokens ?? 0;
       // Kullanım logla (arka planda)
-      logAIUsage(user.id, aiRuntime.modelId, inputTokens + outputTokens).catch(() => {});
+      logAIUsage(user.id, activeRuntime.modelId, inputTokens + outputTokens).catch(() => {});
       void recordAiUsageTelemetry({
         userId: user.id,
         route: "/api/ai/osce",
-        model: aiRuntime.modelId,
+        model: activeRuntime.modelId,
+        keyName: activeRuntime.keyName,
         inputTokens,
         outputTokens,
         module: "osce-generate",
         source: "generateText",
+      }).catch(() => {});
+      void rememberUserSignals({
+        userId: user.id,
+        moduleName: "osce-generate",
+        userMessage: `OSCE vakası üret ${body.specialty ?? ""} ${body.difficulty ?? ""}`.trim(),
+        assistantText: `${caseData.specialty} ${caseData.hiddenDiagnosis} ${caseData.chiefComplaint}`,
       }).catch(() => {});
 
       return NextResponse.json({ caseData });
@@ -252,31 +301,65 @@ export async function POST(req: NextRequest) {
       );
 
       if (!aiRuntime.settings.streamingEnabled) {
-        const result = await generateText({
-          model: aiRuntime.model,
-          system: systemPrompt,
-          messages: [
-            ...safeHistory.map((m) => ({ role: m.role, content: m.content })),
-            { role: "user" as const, content: safeMessage },
-          ],
-          temperature: aiRuntime.temperature,
-          maxOutputTokens: aiRuntime.maxOutputTokens,
-        });
+        const runtimeResult = await withCentralAiRuntimeFailover(
+          {
+            moduleName: "osce-message",
+            requestedModel: "EFFICIENT",
+            requestedMaxOutputTokens: 450,
+          },
+          async (runtime) =>
+            generateText({
+              model: runtime.model,
+              system: systemPrompt,
+              messages: [
+                ...safeHistory.map((m) => ({ role: m.role, content: m.content })),
+                { role: "user" as const, content: safeMessage },
+              ],
+              temperature: runtime.temperature,
+              maxOutputTokens: runtime.maxOutputTokens,
+            }),
+        );
+        const activeRuntime = runtimeResult.runtime;
+        if (runtimeResult.retried) {
+          await createSystemLog({
+            level: "warn",
+            category: "ai",
+            message: "OSCE message key failover uygulandı",
+            details:
+              `module=osce-message | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+              `key=${maskGeminiEnvName(activeRuntime.keyName)} (${activeRuntime.keySource ?? "unknown"})`,
+            userId: user.id,
+          }).catch(() => {});
+        }
+        const result = runtimeResult.value;
 
         const inputTokens = result.usage?.inputTokens ?? 0;
         const outputTokens = result.usage?.outputTokens ?? 0;
-        logAIUsage(user.id, aiRuntime.modelId, inputTokens + outputTokens).catch(() => {});
+        logAIUsage(user.id, activeRuntime.modelId, inputTokens + outputTokens).catch(() => {});
         void recordAiUsageTelemetry({
           userId: user.id,
           route: "/api/ai/osce",
-          model: aiRuntime.modelId,
+          model: activeRuntime.modelId,
+          keyName: activeRuntime.keyName,
           inputTokens,
           outputTokens,
           module: "osce-message",
           source: "generateText",
         }).catch(() => {});
+        void rememberUserSignals({
+          userId: user.id,
+          moduleName: "osce-message",
+          userMessage: safeMessage,
+          assistantText: result.text,
+        }).catch(() => {});
         return NextResponse.json({ text: result.text });
       }
+
+      void rememberUserSignals({
+        userId: user.id,
+        moduleName: "osce-message",
+        userMessage: safeMessage,
+      }).catch(() => {});
 
       const result = streamText({
         model: aiRuntime.model,
@@ -299,6 +382,7 @@ export async function POST(req: NextRequest) {
             userId: user.id,
             route: "/api/ai/osce",
             model: aiRuntime.modelId,
+            keyName: aiRuntime.keyName,
             inputTokens,
             outputTokens,
             module: "osce-message",
@@ -331,29 +415,52 @@ export async function POST(req: NextRequest) {
         .map((m) => `${m.role === "user" ? "ÖĞRENCİ" : "SİSTEM"}: ${sanitizeContextText(m.content, 600)}`)
         .join("\n---\n");
 
-      const result = await generateText({
-        model: aiRuntime.model,
-        system: appendCentralSystemPrompt(
-          sanitizeContextText(systemPrompt, 3_000),
-          aiRuntime.settings,
-        ),
-        prompt: sanitizeContextText(
-          `Sınav konuşması:\n${conversationSummary}\n\nKapsamlı OSCE değerlendirme raporunu yaz.`,
-          AI_LIMITS.MAX_SYSTEM_CONTEXT_CHARS,
-        ),
-        temperature: aiRuntime.temperature,
-        maxOutputTokens: aiRuntime.maxOutputTokens,
-      });
+      const evaluationSystem = appendCentralSystemPrompt(
+        sanitizeContextText(systemPrompt, 3_000),
+        aiRuntime.settings,
+      );
+      const runtimeResult = await withCentralAiRuntimeFailover(
+        {
+          moduleName: "osce-evaluate",
+          requestedModel: "FAST",
+          requestedMaxOutputTokens: 900,
+        },
+        async (runtime) =>
+          generateText({
+            model: runtime.model,
+            system: evaluationSystem,
+            prompt: sanitizeContextText(
+              `Sınav konuşması:\n${conversationSummary}\n\nKapsamlı OSCE değerlendirme raporunu yaz.`,
+              AI_LIMITS.MAX_SYSTEM_CONTEXT_CHARS,
+            ),
+            temperature: runtime.temperature,
+            maxOutputTokens: runtime.maxOutputTokens,
+          }),
+      );
+      const activeRuntime = runtimeResult.runtime;
+      if (runtimeResult.retried) {
+        await createSystemLog({
+          level: "warn",
+          category: "ai",
+          message: "OSCE evaluate key failover uygulandı",
+          details:
+            `module=osce-evaluate | reason=${runtimeResult.retryReason ?? "unknown"} | ` +
+            `key=${maskGeminiEnvName(activeRuntime.keyName)} (${activeRuntime.keySource ?? "unknown"})`,
+          userId: user.id,
+        }).catch(() => {});
+      }
+      const result = runtimeResult.value;
 
       // Logla + sistem kaydı (arka planda)
       const inputTokens = result.usage?.inputTokens ?? 0;
       const outputTokens = result.usage?.outputTokens ?? 0;
       Promise.allSettled([
-        logAIUsage(user.id, aiRuntime.modelId, inputTokens + outputTokens),
+        logAIUsage(user.id, activeRuntime.modelId, inputTokens + outputTokens),
         recordAiUsageTelemetry({
           userId: user.id,
           route: "/api/ai/osce",
-          model: aiRuntime.modelId,
+          model: activeRuntime.modelId,
+          keyName: activeRuntime.keyName,
           inputTokens,
           outputTokens,
           module: "osce-evaluate",
@@ -367,6 +474,12 @@ export async function POST(req: NextRequest) {
           userId: user.id,
         }),
       ]).catch(() => {});
+      void rememberUserSignals({
+        userId: user.id,
+        moduleName: "osce-evaluate",
+        userMessage: conversationSummary,
+        assistantText: result.text,
+      }).catch(() => {});
 
       return NextResponse.json({ report: result.text });
     }
@@ -374,6 +487,19 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Geçersiz işlem." }, { status: 400 });
   } catch (error) {
     console.error("OSCE API Hatası:", error);
+    if (isGeminiErrorLike(error)) {
+      const geminiError = geminiErrorToResponsePayload(error);
+      await createSystemLog({
+        level: "error",
+        category: "ai",
+        message: `Gemini hatası (${geminiError.reason})`,
+        details: `module=osce | reason=${geminiError.reason} | message=${geminiError.message}`,
+      }).catch(() => {});
+      return NextResponse.json(
+        { error: geminiError.message, reason: geminiError.reason },
+        { status: geminiError.status },
+      );
+    }
     const message = error instanceof Error ? error.message : "Bilinmeyen hata";
     return NextResponse.json({ error: `Sistem hatası: ${message}` }, { status: 500 });
   }

@@ -126,9 +126,34 @@ const SYSTEM_SETTING_KEY_SET = new Set<string>(SYSTEM_SETTING_KEYS);
 const DEFAULT_MODULE_TOGGLES: AdminModuleToggle = {};
 const DEFAULT_ANNOUNCEMENTS: AdminAnnouncement[] = [];
 
+const SETTINGS_CACHE_TTL_MS = 60_000;
+let settingsCache: { value: Record<string, string>; expiresAt: number } | null = null;
+let settingsCacheInFlight: Promise<Record<string, string>> | null = null;
+
 async function getCachedSettingMap() {
-  const rows = await prisma.systemSetting.findMany();
-  return Object.fromEntries(rows.map((row) => [row.key, row.value]));
+  const now = Date.now();
+  if (settingsCache && settingsCache.expiresAt > now) {
+    return settingsCache.value;
+  }
+  if (settingsCacheInFlight) {
+    return settingsCacheInFlight;
+  }
+
+  settingsCacheInFlight = (async () => {
+    const rows = await prisma.systemSetting.findMany();
+    const value = Object.fromEntries(rows.map((row) => [row.key, row.value]));
+    settingsCache = {
+      value,
+      expiresAt: Date.now() + SETTINGS_CACHE_TTL_MS,
+    };
+    settingsCacheInFlight = null;
+    return value;
+  })().catch((error) => {
+    settingsCacheInFlight = null;
+    throw error;
+  });
+
+  return settingsCacheInFlight;
 }
 
 function parseBoolean(value: unknown, fallback: boolean): boolean {
@@ -601,4 +626,6 @@ export async function upsertSystemSetting(
     update: { value },
     create: { key, value },
   });
+  settingsCache = null;
+  settingsCacheInFlight = null;
 }

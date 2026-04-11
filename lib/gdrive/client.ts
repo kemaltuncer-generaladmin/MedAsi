@@ -38,6 +38,16 @@ const EXPORT_MAP: Record<string, { mime: string; ext: string }> = {
 const MANAGED_ROOT_NAME = "Medasi Root";
 const MANAGED_ROOT_FOLDER_ID = getFirstNonEmptyEnv(["GOOGLE_DRIVE_ROOT_FOLDER_ID"]) || null;
 let userGoogleTokensSchemaReady: Promise<void> | null = null;
+const driveConnectionCache = new Map<
+  string,
+  {
+    accessToken: string | null;
+    refreshToken: string | null;
+    expiresAt: Date | null;
+    cachedAt: number;
+  }
+>();
+const DRIVE_CONNECTION_CACHE_TTL_MS = 15_000;
 
 export type DriveRequestContext = {
   requestUrl?: string;
@@ -471,6 +481,12 @@ export async function saveUserTokens(
   scope: string,
 ): Promise<void> {
   await ensureUserGoogleTokensTable();
+  driveConnectionCache.set(userId, {
+    accessToken,
+    refreshToken,
+    expiresAt,
+    cachedAt: Date.now(),
+  });
   await prisma.$executeRaw`
     INSERT INTO user_google_tokens (user_id, access_token, refresh_token, expires_at, scope, updated_at)
     VALUES (${userId}, ${accessToken}, ${refreshToken}, ${expiresAt}, ${scope}, NOW())
@@ -485,14 +501,7 @@ export async function saveUserTokens(
 
 export async function getValidAccessToken(userId: string): Promise<string | null> {
   await ensureUserGoogleTokensTable();
-  const rows = await prisma.$queryRaw<{
-    accessToken: string;
-    refreshToken: string | null;
-    expiresAt: Date;
-  }[]>`
-    SELECT access_token AS "accessToken", refresh_token AS "refreshToken", expires_at AS "expiresAt"
-    FROM user_google_tokens WHERE user_id = ${userId} LIMIT 1
-  `;
+  const rows = await getStoredUserGoogleTokens(userId);
 
   if (!rows.length) return null;
   const { accessToken, refreshToken, expiresAt } = rows[0];
@@ -511,9 +520,7 @@ export async function getValidAccessToken(userId: string): Promise<string | null
 
 export async function hasDriveConnection(userId: string): Promise<boolean> {
   await ensureUserGoogleTokensTable();
-  const rows = await prisma.$queryRaw<{ user_id: string }[]>`
-    SELECT user_id FROM user_google_tokens WHERE user_id = ${userId} LIMIT 1
-  `;
+  const rows = await getStoredUserGoogleTokens(userId);
   return rows.length > 0;
 }
 
@@ -521,8 +528,8 @@ export async function getDriveConnectionStatus(userId: string): Promise<{
   connected: boolean;
   reauthRequired: boolean;
 }> {
-  const hasConnection = await hasDriveConnection(userId);
-  if (!hasConnection) return { connected: false, reauthRequired: false };
+  const tokenRows = await getStoredUserGoogleTokens(userId);
+  if (!tokenRows.length) return { connected: false, reauthRequired: false };
 
   const token = await getValidAccessToken(userId);
   if (!token) return { connected: false, reauthRequired: true };
@@ -531,6 +538,7 @@ export async function getDriveConnectionStatus(userId: string): Promise<{
 
 export async function revokeDriveConnection(userId: string): Promise<void> {
   await ensureUserGoogleTokensTable();
+  driveConnectionCache.delete(userId);
   const rows = await prisma.$queryRaw<{ accessToken: string }[]>`
     SELECT access_token AS "accessToken" FROM user_google_tokens WHERE user_id = ${userId} LIMIT 1
   `;
@@ -538,6 +546,45 @@ export async function revokeDriveConnection(userId: string): Promise<void> {
     fetch(`https://oauth2.googleapis.com/revoke?token=${rows[0].accessToken}`).catch(() => {});
   }
   await prisma.$executeRaw`DELETE FROM user_google_tokens WHERE user_id = ${userId}`;
+}
+
+async function getStoredUserGoogleTokens(userId: string): Promise<
+  {
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: Date;
+  }[]
+> {
+  const cached = driveConnectionCache.get(userId);
+  if (cached && cached.cachedAt + DRIVE_CONNECTION_CACHE_TTL_MS > Date.now()) {
+    if (!cached.accessToken || !cached.expiresAt) return [];
+    return [
+      {
+        accessToken: cached.accessToken,
+        refreshToken: cached.refreshToken,
+        expiresAt: cached.expiresAt,
+      },
+    ];
+  }
+
+  const rows = await prisma.$queryRaw<{
+    accessToken: string;
+    refreshToken: string | null;
+    expiresAt: Date;
+  }[]>`
+    SELECT access_token AS "accessToken", refresh_token AS "refreshToken", expires_at AS "expiresAt"
+    FROM user_google_tokens WHERE user_id = ${userId} LIMIT 1
+  `;
+
+  const first = rows[0];
+  driveConnectionCache.set(userId, {
+    accessToken: first?.accessToken ?? null,
+    refreshToken: first?.refreshToken ?? null,
+    expiresAt: first?.expiresAt ?? null,
+    cachedAt: Date.now(),
+  });
+
+  return rows;
 }
 
 function toDriveError(reason: DriveDownloadErrorReason, fallback?: string): DriveIntegrationError {

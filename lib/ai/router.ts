@@ -1,3 +1,5 @@
+import { resolveAiModule } from "@/lib/ai/module-registry";
+
 const USER_ALIGNMENT_LAYER = `
 UYUM KATMANI:
 - Base prompttaki kullanıcı hedefi, seviye, öğrenme stili ve iletişim tercihi bağlayıcıdır.
@@ -30,16 +32,16 @@ function buildModulePrompt(core: string, options?: { strictJson?: boolean; extra
 }
 
 export function getModulePrompt(moduleName?: string): string {
-  if (!moduleName) {
-    return buildModulePrompt("Genel asistan modundasın. Gelen soruyu MEDASI prensiplerine göre yanıtla.", {
-      extraLines: [
-        "GÜNLÜK UYUM: Kullanıcının seviyesine göre yanıtı kısalt veya derinleştir.",
-        "GÜVENLİK: Soru yetersizse detay iste; tıbbi risk varsa uyarıyı öne al.",
-      ],
-    });
-  }
+  const resolved = resolveAiModule(moduleName);
 
-  switch (moduleName) {
+  switch (resolved.config.promptId) {
+    case "general":
+      return buildModulePrompt("Genel asistan modundasın. Gelen soruyu MEDASI prensiplerine göre yanıtla.", {
+        extraLines: [
+          "GÜNLÜK UYUM: Kullanıcının seviyesine göre yanıtı kısalt veya derinleştir.",
+          "GÜVENLİK: Soru yetersizse detay iste; tıbbi risk varsa uyarıyı öne al.",
+        ],
+      });
     case "ai-diagnosis":
       return buildModulePrompt(
         `\nŞU ANKİ MODÜL: AI TANI ASİSTANI
@@ -145,21 +147,6 @@ ADAPTİF KURAL:
         ],
       });
 
-    case "exams-osce":
-      return buildModulePrompt(`\nŞU ANKİ MODÜL: OSCE SİMLÜLATÖRÜ (SÖZLÜ SINAV)
-GÖREVİN: Tıp fakültesi jüri üyesisin. Ciddi, akademik ve sorgulayıcı ol.
-SÜREÇ:
-1. Kullanıcıya zorlayıcı bir klinik vaka sun (Şikayet ve Vitallerle başla).
-2. Kullanıcının her hamlesini (muayene, tetkik, tedavi) sorgula. "Bunu neden istedin?", "Ayırıcı tanıda neyi dışladın?" gibi sorular sor.
-3. Asla tüm bilgiyi tek seferde verme. Kullanıcı sordukça laboratuvar sonuçlarını açıkla.
-4. Sınav sonunda 'PUANLAMA VE GERİ BİLDİRİM' başlığı altında performansı 100 üzerinden değerlendir.`,
-      {
-        extraLines: [
-          "JÜRİ DİLİ: Sorgulayıcı ol ama öğretici kal; kullanıcının seviyesine göre gereksiz sertlikten kaçın.",
-          "Aşırı bilgi yükleme; vaka akışını kullanıcının kararlarına göre kademeli aç.",
-        ],
-      });
-
     case "clinic-assistant":
       return buildModulePrompt(`\nŞU ANKİ MODÜL: KLİNİK AI ASİSTAN
 GÖREVİN: Deneyimli bir klinisyen gibi hekime klinik karar desteği sağlamak.
@@ -175,7 +162,6 @@ YAKLAŞIM:
         ],
       });
 
-    case "flashcard":
     case "flashcards-ai":
       return buildModulePrompt(`\nŞU ANKİ MODÜL: AKILLI FLASHCARD
 GÖREVİN: Tıp öğrencisine aktif hatırlama yöntemiyle konu pekiştirmesi sağlamak.
@@ -192,7 +178,6 @@ YAKLAŞIM:
         ],
       });
 
-    case "akilli-planlayici":
     case "planners-akilli":
       return buildModulePrompt(`\nŞU ANKİ MODÜL: AKILLI PLANLAYICI
 GÖREVİN: Tıp öğrencisi veya intern hekimin çalışma ve rotasyon planını optimize etmek.
@@ -245,5 +230,6 @@ YAKLAŞIM:
           "KULLANICI YÖNÜ: Yanıtı kullanıcının hedefi, seviyesi ve ton tercihine göre ayarla.",
         ],
       });
+
   }
 }

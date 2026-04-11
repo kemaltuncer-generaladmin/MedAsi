@@ -41,10 +41,10 @@ export default function RegisterPage() {
   const passwordsMatch =
     confirmPassword.length === 0 || password === confirmPassword;
   const packageLabels: Record<(typeof PACKAGE_SELECTION_OPTIONS)[number], string> = {
-    ucretsiz: "Ücretsiz — Temel Araçlar",
-    giris: "Giriş — ₺99/ay (Sınırlı AI)",
-    pro: "Pro — ₺249/ay (Tam AI)",
-    enterprise: "Kurumsal / Grup — Demo Talep Et",
+    ucretsiz: "Ücretsiz — 75K token · 150 soru/ay",
+    giris: "Giriş — ₺149/ay · 250K token · 500 soru/ay",
+    pro: "Pro — ₺399/ay · 500K token · tam erişim",
+    enterprise: "Kurumsal / Grup — özel kapsam",
   };
 
   useEffect(() => {
@@ -154,7 +154,7 @@ export default function RegisterPage() {
               required
               autoComplete="name"
               aria-required="true"
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function RegisterPage() {
               autoComplete="email"
               inputMode="email"
               aria-required="true"
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -207,7 +207,7 @@ export default function RegisterPage() {
               aria-required="true"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
             />
             <button
               type="button"
@@ -243,7 +243,7 @@ export default function RegisterPage() {
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               error={!passwordsMatch ? "Şifreler eşleşmiyor" : undefined}
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
             />
             <button
               type="button"
@@ -273,7 +273,7 @@ export default function RegisterPage() {
               name="selectedPackage"
               required
               defaultValue=""
-              className="h-11 w-full appearance-none rounded-[4px] border border-[var(--color-border)] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
+              className="h-11 w-full appearance-none rounded border border-[var(--color-border)] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
             >
               <option
                 value=""
@@ -321,7 +321,7 @@ export default function RegisterPage() {
               value={couponCode}
               onChange={(e) => handleCouponChange(e.target.value)}
               autoComplete="off"
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-10 uppercase tracking-widest focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-10 uppercase tracking-widest focus:ring-[var(--color-primary)]"
               style={{
                 borderColor:
                   couponState?.valid === true
@@ -346,7 +346,7 @@ export default function RegisterPage() {
           {/* Kupon durumu mesajı */}
           {couponState?.valid === true && (
             <div
-              className="flex items-start gap-2 rounded-[4px] px-3 py-2 text-xs"
+              className="flex items-start gap-2 rounded px-3 py-2 text-xs"
               style={{
                 background: "rgba(34,197,94,0.08)",
                 border: "1px solid rgba(34,197,94,0.25)",
@@ -388,7 +388,7 @@ export default function RegisterPage() {
               name="seniority"
               required
               defaultValue=""
-              className="h-11 w-full appearance-none rounded-[4px] border border-[var(--color-border)] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
+              className="h-11 w-full appearance-none rounded border border-[var(--color-border)] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
             >
               <option
                 value=""
@@ -458,7 +458,7 @@ export default function RegisterPage() {
             !legalAccepted ||
             !medicalDataConsentAccepted
           }
-          className="h-11 w-full rounded-[4px] border-0 bg-[var(--color-primary)] text-sm font-semibold text-[#020617] hover:-translate-y-0.5 hover:bg-[var(--color-primary-hover)]"
+          className="h-11 w-full rounded border-0 bg-[var(--color-primary)] text-sm font-semibold text-[#020617] hover:-translate-y-0.5 hover:bg-[var(--color-primary-hover)]"
         >
           {isPending ? (
             <>

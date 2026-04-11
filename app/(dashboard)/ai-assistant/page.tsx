@@ -668,7 +668,7 @@ export default function AIAssistantPage() {
             {messages.length === 0 && (
               <div className="flex flex-col items-center justify-center h-full gap-7">
                 <div
-                  className="w-24 h-24 rounded-[32px] flex items-center justify-center"
+                  className="w-24 h-24 rounded-3xl flex items-center justify-center"
                   style={{
                     background:
                       "radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--color-primary) 24%, transparent), transparent 60%), color-mix(in srgb, var(--color-surface) 74%, transparent)",
@@ -898,7 +898,7 @@ export default function AIAssistantPage() {
             />
 
             <div
-              className="rounded-[22px] p-2 transition-all medasi-input-shell"
+              className="rounded-2xl p-2 transition-all medasi-input-shell"
               style={{
                 background:
                   "linear-gradient(180deg, color-mix(in srgb, var(--color-surface-elevated) 88%, transparent), color-mix(in srgb, var(--color-surface) 78%, transparent))",

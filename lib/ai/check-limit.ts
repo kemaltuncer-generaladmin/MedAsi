@@ -13,9 +13,16 @@ import {
   getOrCreateWallet,
 } from "./token-wallet";
 import { getCurrentUserWithRole } from "@/lib/auth/current-user-role";
+import { getResolvedUserPolicy } from "@/lib/access/entitlements";
 
 export type CheckLimitResult =
-  | { canProceed: true; isOrgMember: boolean; orgId?: string }
+  | {
+      canProceed: true;
+      isOrgMember: boolean;
+      orgId?: string;
+      packageTier?: string;
+      minBalanceToStart?: bigint;
+    }
   | {
       canProceed: false;
       reason:
@@ -23,8 +30,10 @@ export type CheckLimitResult =
         | "no_package"
         | "org_inactive"
         | "budget_exceeded"
-        | "insufficient_tokens";
+        | "insufficient_tokens"
+        | "package_blocked";
       balance?: bigint;
+      packageTier?: string;
     };
 
 // ─── Ön kontrol: AI çağrısına izin var mı? ───────────────────────────────
@@ -67,19 +76,40 @@ export async function checkAndLogAiUsage(): Promise<CheckLimitResult> {
     return { canProceed: true, isOrgMember: true, orgId: org.id };
   }
 
-  // Normal kullanıcı: token cüzdanı kontrolü (minimum 100 token gerekli)
-  const balance = await getWalletBalance(user.id);
-  if (balance < 100n) {
-    return { canProceed: false, reason: "insufficient_tokens", balance };
+  const resolvedPolicy = await getResolvedUserPolicy(user.id);
+  if (!resolvedPolicy) {
+    return { canProceed: false, reason: "no_package" };
   }
 
-  return { canProceed: true, isOrgMember: false };
+  // Normal kullanıcı: cüzdanı yoksa otomatik oluştur, sonra bakiye kontrolü yap
+  const wallet = await getOrCreateWallet(user.id);
+  const balance = wallet.balance ?? (await getWalletBalance(user.id));
+  const minBalanceToStart = BigInt(resolvedPolicy.packagePolicy.aiLimits.minBalanceToStart);
+  if (balance < minBalanceToStart) {
+    return {
+      canProceed: false,
+      reason: "insufficient_tokens",
+      balance,
+      packageTier: resolvedPolicy.packageTier,
+    };
+  }
+
+  return {
+    canProceed: true,
+    isOrgMember: false,
+    packageTier: resolvedPolicy.packageTier,
+    minBalanceToStart,
+  };
 }
 
 // ─── Eski uyumluluk: basit boolean kontrol ───────────────────────────────
 export async function checkAILimit(userId: string): Promise<boolean> {
-  const balance = await getWalletBalance(userId);
-  return balance >= 100n;
+  const [balance, resolvedPolicy] = await Promise.all([
+    getWalletBalance(userId),
+    getResolvedUserPolicy(userId),
+  ]);
+  if (!resolvedPolicy) return false;
+  return balance >= BigInt(resolvedPolicy.packagePolicy.aiLimits.minBalanceToStart);
 }
 
 // ─── Token düş + session kaydet ──────────────────────────────────────────

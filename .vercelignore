@@ -9,6 +9,5 @@ index.html
 *.log
 *.tgz
 scripts
-prisma/migrations
 .env
 .env.local

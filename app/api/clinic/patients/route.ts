@@ -26,7 +26,7 @@ const globalAny = globalThis as unknown as Record<string, Patient[]>;
 if (!globalAny[key]) globalAny[key] = [];
 
 export async function GET() {
-  return NextResponse.json({ data: globalAny[key] });
+  return NextResponse.json({ data: globalAny[key], patients: globalAny[key] });
 }
 
 export async function POST(req: Request) {

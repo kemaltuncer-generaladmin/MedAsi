@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { Suspense, useEffect, useMemo, useState, useTransition } from "react";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Suspense, useMemo, useState, useTransition } from "react";
+import { useSearchParams } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { AlertCircle, CheckCircle2, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui";
@@ -35,8 +35,6 @@ function LoginPageSkeleton() {
 }
 
 function LoginPageContent() {
-  const router = useRouter();
-  const pathname = usePathname();
   const searchParams = useSearchParams();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -199,7 +197,7 @@ function LoginPageContent() {
               inputMode="email"
               aria-required="true"
               aria-describedby={error ? "login-error" : undefined}
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -225,7 +223,7 @@ function LoginPageContent() {
               required
               autoComplete="current-password"
               aria-required="true"
-              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
             />
             <button
               type="button"
@@ -258,7 +256,7 @@ function LoginPageContent() {
         <Button
           type="submit"
           disabled={isPending}
-          className="h-11 w-full rounded-[4px] border-0 bg-[var(--color-primary)] text-sm font-semibold text-[#020617] hover:-translate-y-0.5 hover:bg-[var(--color-primary-hover)]"
+          className="h-11 w-full rounded border-0 bg-[var(--color-primary)] text-sm font-semibold text-[#020617] hover:-translate-y-0.5 hover:bg-[var(--color-primary-hover)]"
         >
           {isPending ? (
             <>

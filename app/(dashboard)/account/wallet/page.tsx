@@ -1,348 +1,230 @@
 "use client";
 
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
 import {
-  CreditCard,
-  Zap,
-  Star,
-  Building2,
+  ArrowRight,
   CheckCircle2,
+  CreditCard,
   FileText,
-  Plus,
-  TrendingUp,
+  Sparkles,
+  Wallet,
+  Zap,
 } from "lucide-react";
-import toast from "react-hot-toast";
-import posthog from "posthog-js";
+import { AccountSubpageShell } from "@/components/account/AccountSubpageShell";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { getAllDefaultPackagePolicies, normalizePackageTier } from "@/lib/packages/policy-defaults";
 
-const FREE_FEATURES = [
-  "Günde 10 AI sorgusu",
-  "Lab değerlendirme aracı",
-  "OSCE pratik modu (3 istasyon)",
-  "Temel not tutma",
-  "Topluluk erişimi",
-];
+type UsageResponse = {
+  packageName: string;
+  monthlyUsed: number;
+  balance: number;
+  totalEarned: number;
+  totalSpent: number;
+  walletPurchase?: {
+    serverEnabled: boolean;
+    clientEnabled: boolean;
+    status: "enabled" | "maintenance";
+    detail: string;
+  };
+};
 
-const PRO_FEATURES = [
-  "Günde 50 AI sorgusu",
-  "Tüm OSCE istasyonları",
-  "Gelişmiş lab analizi",
-  "PDF rapor aktarımı",
-  "Öncelikli destek",
-];
+type HomeResponse = {
+  user?: {
+    packageName?: string;
+  };
+};
 
-const CLINIC_FEATURES = [
-  "Sınırsız AI sorgusu",
-  "Ekip yönetimi (5 kullanıcı)",
-  "Kurumsal entegrasyon",
-  "Özel eğitim materyali",
-  "Dedicated destek hattı",
-];
+const PLAN_COLORS: Record<string, string> = {
+  ucretsiz: "var(--color-text-secondary)",
+  giris: "var(--color-primary)",
+  pro: "var(--color-warning)",
+  kurumsal: "var(--color-success)",
+};
+
+function formatNumber(value: number): string {
+  return Math.max(0, Number.isFinite(value) ? value : 0).toLocaleString("tr-TR");
+}
 
 export default function WalletPage() {
-  const currentPlan = "free";
-  const aiUsed = 0;
-  const aiLimit = 50;
+  const [usage, setUsage] = useState<UsageResponse | null>(null);
+  const [home, setHome] = useState<HomeResponse | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  function handleUpgrade() {
-    toast("Ücretli planlar yakında aktif olacak", { icon: "⏳" });
-    posthog.capture("plan_button_clicked", {
-      plan_name: "Pro", // Hedeflenen plan
-      action: "upgrade",
-      location: "wallet_page",
-    });
-  }
+  useEffect(() => {
+    async function load() {
+      try {
+        const [usageRes, homeRes] = await Promise.all([
+          fetch("/api/ai/usage", { cache: "no-store" }),
+          fetch("/api/dashboard/home", { cache: "no-store" }),
+        ]);
 
-  function handleAddCard() {
-    toast("Kart ekleme özelliği yakında aktif olacak", { icon: "⏳" });
-  }
+        if (usageRes.ok) {
+          setUsage(await usageRes.json());
+        }
 
-  const usagePercent = Math.round((aiUsed / aiLimit) * 100);
+        if (homeRes.ok) {
+          setHome(await homeRes.json());
+        }
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void load();
+  }, []);
+
+  const currentTier = useMemo(
+    () => normalizePackageTier(home?.user?.packageName ?? usage?.packageName ?? "ucretsiz"),
+    [home?.user?.packageName, usage?.packageName],
+  );
+
+  const policies = getAllDefaultPackagePolicies();
+  const activePolicy = policies.find((item) => item.tier === currentTier) ?? policies[0];
+  const monthlyUsed = usage?.monthlyUsed ?? 0;
+  const balance = usage?.balance ?? 0;
+  const totalSpent = usage?.totalSpent ?? 0;
+  const totalEarned = usage?.totalEarned ?? 0;
+  const purchaseStatus = usage?.walletPurchase?.status ?? "maintenance";
+  const purchaseDetail = usage?.walletPurchase?.detail ?? "Satın alma bakım/kapalı modda";
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-          Abonelik & Faturalama
-        </h1>
-        <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-          Plan bilgilerinizi ve fatura geçmişinizi görüntüleyin
-        </p>
+    <AccountSubpageShell
+      icon={Wallet}
+      title="Cüzdan"
+      description="Planınız, token kullanımı ve faturalama durumunu tek ekranda izleyin."
+      badge={activePolicy.displayName}
+      stats={[
+        { label: "Mevcut plan", value: activePolicy.displayName },
+        { label: "Bu ay harcanan", value: `${formatNumber(monthlyUsed)} token` },
+        { label: "Bakiye", value: `${formatNumber(balance)} token` },
+        { label: "Toplam harcama", value: `${formatNumber(totalSpent)} token` },
+      ]}
+      actions={
+        <Link href="/upgrade">
+          <Button size="sm">
+            <Sparkles size={14} />
+            Planı Yükselt
+          </Button>
+        </Link>
+      }
+    >
+      <div className="grid gap-5 xl:grid-cols-[1.15fr_0.85fr]">
+        <Card variant="bordered" className="rounded-3xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <CreditCard size={16} className="text-[var(--color-primary)]" />
+              Plan karşılaştırması
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-3 md:grid-cols-2">
+              {policies.map((plan) => {
+                const isActive = plan.tier === currentTier;
+                return (
+                  <div
+                    key={plan.tier}
+                    className="rounded-2xl border p-4"
+                    style={{
+                      borderColor: isActive
+                        ? "color-mix(in srgb, var(--color-primary) 45%, var(--color-border))"
+                        : "var(--color-border)",
+                      backgroundColor: isActive
+                        ? "color-mix(in srgb, var(--color-primary) 10%, var(--color-surface))"
+                        : "var(--color-surface-elevated)",
+                    }}
+                  >
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="text-sm font-semibold text-[var(--color-text-primary)]">
+                        {plan.displayName}
+                      </p>
+                      {isActive ? <Badge variant="default">Aktif</Badge> : null}
+                    </div>
+                    <p className="text-2xl font-semibold" style={{ color: PLAN_COLORS[plan.tier] }}>
+                      ₺{formatNumber(plan.monthlyPrice)}
+                      <span className="text-sm font-normal text-[var(--color-text-secondary)]"> / ay</span>
+                    </p>
+                    <div className="mt-3 space-y-1.5 text-xs text-[var(--color-text-secondary)]">
+                      <p className="flex items-center gap-1.5">
+                        <CheckCircle2 size={12} className="text-[var(--color-success)]" />
+                        {formatNumber(plan.initialTokenGrant)} başlangıç token
+                      </p>
+                      <p className="flex items-center gap-1.5">
+                        <CheckCircle2 size={12} className="text-[var(--color-success)]" />
+                        {plan.questionBankMonthlyLimit === null
+                          ? "Sınırsız soru bankası"
+                          : `${formatNumber(plan.questionBankMonthlyLimit)} soru / ay`}
+                      </p>
+                      <p className="flex items-center gap-1.5">
+                        <CheckCircle2 size={12} className="text-[var(--color-success)]" />
+                        {plan.hasExamAccess ? "Sınav modülleri açık" : "Temel sınav erişimi"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </CardContent>
+        </Card>
+
+        <div className="space-y-5">
+          <Card variant="bordered" className="rounded-3xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Zap size={16} className="text-[var(--color-primary)]" />
+                Token özeti
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-secondary)]">Toplam kazanım</span>
+                <span className="font-medium text-[var(--color-text-primary)]">{formatNumber(totalEarned)}</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-secondary)]">Toplam harcama</span>
+                <span className="font-medium text-[var(--color-text-primary)]">{formatNumber(totalSpent)}</span>
+              </div>
+              <div className="h-px bg-[var(--color-border)]" />
+              <div className="flex items-center justify-between">
+                <span className="text-[var(--color-text-secondary)]">Mevcut bakiye</span>
+                <span className="font-semibold text-[var(--color-primary)]">{formatNumber(balance)} token</span>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card variant="bordered" className="rounded-3xl">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <FileText size={16} className="text-[var(--color-primary)]" />
+                Faturalama ve ödeme
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm text-[var(--color-text-secondary)]">
+              <p>
+                {purchaseStatus === "enabled"
+                  ? "Satın alma aktif. Kart yönetimi ve fatura geçmişi yakında bu alanda görünecek."
+                  : "Satın alma şu anda bakım/kapalı modda. Bu bir sistem hatası değil, kontrollü duraktır."}
+              </p>
+              <p className="text-xs">{purchaseDetail}</p>
+              <Link
+                href="/account/support"
+                className="inline-flex items-center gap-1.5 text-[var(--color-primary)] hover:underline"
+              >
+                Faturalama desteği aç
+                <ArrowRight size={13} />
+              </Link>
+            </CardContent>
+          </Card>
+        </div>
       </div>
 
-      {/* Mevcut Plan */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap size={18} className="text-[var(--color-primary)]" />
-            Mevcut Plan
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-start justify-between gap-4 mb-5">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-xl bg-[var(--color-surface-elevated)] border border-[var(--color-border)] flex items-center justify-center">
-                <Star
-                  size={22}
-                  className="text-[var(--color-text-secondary)]"
-                />
-              </div>
-              <div>
-                <div className="flex items-center gap-2 mb-0.5">
-                  <span className="font-bold text-[var(--color-text-primary)] text-lg">
-                    Ücretsiz Plan
-                  </span>
-                  <Badge variant="secondary">Ücretsiz</Badge>
-                </div>
-                <p className="text-sm text-[var(--color-text-secondary)]">
-                  Temel özellikler ile başlayın
-                </p>
-              </div>
-            </div>
-            <Button variant="primary" size="sm" onClick={handleUpgrade}>
-              <TrendingUp size={14} />
-              Yükselt
-            </Button>
-          </div>
-
-          <div className="space-y-2">
-            {FREE_FEATURES.map((f, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 text-sm text-[var(--color-text-secondary)]"
-              >
-                <CheckCircle2
-                  size={14}
-                  className="text-[var(--color-success)] shrink-0"
-                />
-                {f}
-              </div>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* AI Kredi Kullanımı */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Zap size={18} className="text-[var(--color-primary)]" />
-            AI Kredi Kullanımı
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="mb-3 flex items-center justify-between">
-            <span className="text-sm text-[var(--color-text-secondary)]">
-              Bu ay kullanım
-            </span>
-            <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-              {aiUsed} / {aiLimit} sorgu
-            </span>
-          </div>
-          <div className="w-full h-2.5 rounded-full bg-[var(--color-surface-elevated)] overflow-hidden">
-            <div
-              className="h-full rounded-full transition-all"
-              style={{
-                width: `${usagePercent}%`,
-                background: "var(--color-primary)",
-              }}
-            />
-          </div>
-          <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-            Her ay 1'inde sıfırlanır. Daha fazla kullanım için Pro plana geçin.
-          </p>
-        </CardContent>
-      </Card>
-
-      {/* Plan Karşılaştırması */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle>Plan Karşılaştırması</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {/* Free */}
-            <div className="rounded-lg border border-[var(--color-primary)] bg-[var(--color-primary)]/5 p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Star size={16} className="text-[var(--color-primary)]" />
-                <span className="font-semibold text-[var(--color-text-primary)] text-sm">
-                  Ücretsiz
-                </span>
-                <Badge variant="default" className="ml-auto text-xs">
-                  Aktif
-                </Badge>
-              </div>
-              <p className="text-2xl font-bold text-[var(--color-text-primary)] mb-1">
-                ₺0
-                <span className="text-sm font-normal text-[var(--color-text-secondary)]">
-                  /ay
-                </span>
-              </p>
-              <div className="space-y-1.5 mt-3">
-                {FREE_FEATURES.map((f, i) => (
-                  <p
-                    key={i}
-                    className="text-xs text-[var(--color-text-secondary)] flex gap-1.5 items-start"
-                  >
-                    <CheckCircle2
-                      size={12}
-                      className="text-[var(--color-success)] mt-0.5 shrink-0"
-                    />
-                    {f}
-                  </p>
-                ))}
-              </div>
-            </div>
-
-            {/* Pro */}
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Zap size={16} className="text-[var(--color-warning)]" />
-                <span className="font-semibold text-[var(--color-text-primary)] text-sm">
-                  Pro
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-[var(--color-text-primary)] mb-1">
-                ₺199
-                <span className="text-sm font-normal text-[var(--color-text-secondary)]">
-                  /ay
-                </span>
-              </p>
-              <div className="space-y-1.5 mt-3">
-                {PRO_FEATURES.map((f, i) => (
-                  <p
-                    key={i}
-                    className="text-xs text-[var(--color-text-secondary)] flex gap-1.5 items-start"
-                  >
-                    <CheckCircle2
-                      size={12}
-                      className="text-[var(--color-success)] mt-0.5 shrink-0"
-                    />
-                    {f}
-                  </p>
-                ))}
-              </div>
-              <Button
-                variant="primary"
-                size="sm"
-                className="w-full mt-4"
-                onClick={handleUpgrade}
-              >
-                Geç
-              </Button>
-            </div>
-
-            {/* Klinik */}
-            <div className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-4">
-              <div className="flex items-center gap-2 mb-3">
-                <Building2
-                  size={16}
-                  className="text-[var(--color-secondary)]"
-                />
-                <span className="font-semibold text-[var(--color-text-primary)] text-sm">
-                  Klinik
-                </span>
-              </div>
-              <p className="text-2xl font-bold text-[var(--color-text-primary)] mb-1">
-                ₺599
-                <span className="text-sm font-normal text-[var(--color-text-secondary)]">
-                  /ay
-                </span>
-              </p>
-              <div className="space-y-1.5 mt-3">
-                {CLINIC_FEATURES.map((f, i) => (
-                  <p
-                    key={i}
-                    className="text-xs text-[var(--color-text-secondary)] flex gap-1.5 items-start"
-                  >
-                    <CheckCircle2
-                      size={12}
-                      className="text-[var(--color-success)] mt-0.5 shrink-0"
-                    />
-                    {f}
-                  </p>
-                ))}
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="w-full mt-4 border border-[var(--color-border)]"
-                onClick={handleUpgrade}
-              >
-                İletişime Geç
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Ödeme Yöntemi */}
-      <Card variant="bordered">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <CardTitle className="flex items-center gap-2">
-              <CreditCard size={18} className="text-[var(--color-primary)]" />
-              Ödeme Yöntemi
-            </CardTitle>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="border border-[var(--color-border)]"
-              onClick={handleAddCard}
-            >
-              <Plus size={14} />
-              Kart Ekle
-            </Button>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 gap-3">
-            <div className="w-12 h-12 rounded-full bg-[var(--color-surface-elevated)] flex items-center justify-center">
-              <CreditCard
-                size={20}
-                className="text-[var(--color-text-secondary)]"
-              />
-            </div>
-            <p className="text-sm font-medium text-[var(--color-text-primary)]">
-              Kayıtlı ödeme yöntemi yok
-            </p>
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              Ücretli planlara geçmek için kart ekleyin
-            </p>
-            <Button variant="primary" size="sm" onClick={handleAddCard}>
-              <Plus size={14} />
-              Kart Ekle
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Fatura Geçmişi */}
-      <Card variant="bordered">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText size={18} className="text-[var(--color-primary)]" />
-            Fatura Geçmişi
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col items-center justify-center py-8 gap-3">
-            <div className="w-12 h-12 rounded-full bg-[var(--color-surface-elevated)] flex items-center justify-center">
-              <FileText
-                size={20}
-                className="text-[var(--color-text-secondary)]"
-              />
-            </div>
-            <p className="text-sm font-medium text-[var(--color-text-primary)]">
-              Henüz fatura bulunmuyor
-            </p>
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              Ücretli plana geçtikten sonra faturalarınız burada görünecek
-            </p>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+      {!loading ? null : (
+        <Card variant="bordered" className="rounded-3xl">
+          <CardContent className="text-sm">Veriler güncelleniyor…</CardContent>
+        </Card>
+      )}
+    </AccountSubpageShell>
   );
 }

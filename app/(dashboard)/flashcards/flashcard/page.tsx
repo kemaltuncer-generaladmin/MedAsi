@@ -212,9 +212,24 @@ export default function FlashcardPage() {
   useEffect(() => {
     async function loadFromDB() {
       try {
-        const res = await fetch('/api/flashcards'); // Bu API'yi ayrıca oluşturmalısın
+        const res = await fetch("/api/flashcards", { cache: "no-store" });
         const data = await res.json();
-        if(data) setDecks(data);
+        if (Array.isArray(data?.decks) && data.decks.length > 0) {
+          setDecks(data.decks);
+          return;
+        }
+        const localRaw = localStorage.getItem(STORAGE_KEY);
+        const localDecks = localRaw ? JSON.parse(localRaw) : [];
+        if (Array.isArray(localDecks) && localDecks.length > 0) {
+          setDecks(localDecks);
+          await fetch("/api/flashcards", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ decks: localDecks }),
+          }).catch(() => {});
+          return;
+        }
+        setDecks([SAMPLE_DECK]);
       } catch (e) { console.error("DB yükleme hatası", e); }
     }
     loadFromDB();
@@ -222,7 +237,12 @@ export default function FlashcardPage() {
 
   const saveDecks = useCallback((ds: Deck[]) => {
     setDecks(ds);
-    // Supabase Aktif;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(ds));
+    void fetch("/api/flashcards", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ decks: ds }),
+    }).catch(() => {});
   }, []);
 
   function openDeck(deck: Deck) {

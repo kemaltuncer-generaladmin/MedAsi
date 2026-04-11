@@ -5,21 +5,22 @@
  * Tüm hareketler token_transactions tablosuna kaydedilir (tam defter).
  *
  * Token Grant Politikası:
- *   Ücretsiz  → 500.000
- *   Giriş     → 1.000.000
- *   Pro       → 2.000.000
+ *   Ücretsiz  → 75.000
+ *   Giriş     → 250.000
+ *   Pro       → 500.000
  *
  * NOT: prisma generate çalışmadığından raw SQL kullanılıyor.
  */
 
 import { prisma } from "@/lib/prisma";
+import { normalizePackageTier } from "@/lib/packages/policy";
 
 // ─── Sabitler ────────────────────────────────────────────────────────────────
 export const TOKEN_GRANTS = {
-  ucretsiz: 100_000n,
-  giris: 300_000n,
+  ucretsiz: 75_000n,
+  giris: 250_000n,
   pro: 500_000n,
-  enterprise: 1_000_000n,
+  kurumsal: 500_000n,
 } as const;
 
 // ─── Tipler ──────────────────────────────────────────────────────────────────
@@ -256,8 +257,8 @@ export async function getTokenPackages() {
 
 // ─── Plan aktivasyonunda token grant ────────────────────────────────────
 export async function grantPlanTokens(userId: string, packageName: string): Promise<bigint | null> {
-  const nameLower = packageName.toLowerCase() as keyof typeof TOKEN_GRANTS;
-  const grant = TOKEN_GRANTS[nameLower];
+  const normalizedTier = normalizePackageTier(packageName) as keyof typeof TOKEN_GRANTS;
+  const grant = TOKEN_GRANTS[normalizedTier];
   if (!grant) return null;
 
   const newBalance = await creditTokens(

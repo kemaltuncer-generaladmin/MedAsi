@@ -12,6 +12,9 @@ export const onboardingSchema = z.object({
     .object({
       displayName: z.string().optional(),
       university: z.string().optional(),
+      universityId: z.string().optional(),
+      programId: z.string().optional(),
+      termId: z.string().optional(),
       level: z.string().optional(),
       expectedGradYear: z.string().optional(),
       dailyStudyHours: z.number().min(0).max(24).optional(),

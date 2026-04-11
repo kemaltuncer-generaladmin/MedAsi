@@ -1,31 +1,27 @@
-export type NormalizedPackageTier =
-  | "ucretsiz"
-  | "giris"
-  | "pro"
-  | "kurumsal";
+import { getAllDefaultPackagePolicies, type PackageTier } from "@/lib/packages/policy-defaults";
 
-export const PACKAGES: Record<
+export type NormalizedPackageTier = PackageTier;
+
+export const PACKAGES = Object.fromEntries(
+  getAllDefaultPackagePolicies().map((policy) => [
+    policy.tier,
+    {
+      label: policy.displayName,
+      dailyAiLimit: policy.aiLimits.minBalanceToStart,
+      price: policy.monthlyPrice,
+      tokenGrant: policy.initialTokenGrant,
+      questionBankMonthlyLimit: policy.questionBankMonthlyLimit,
+      hasExamAccess: policy.hasExamAccess,
+    },
+  ]),
+) as Record<
   NormalizedPackageTier,
-  { label: string; dailyAiLimit: number; price: number }
-> = {
-  ucretsiz: {
-    label: "Ücretsiz",
-    dailyAiLimit: 25,
-    price: 0,
-  },
-  giris: {
-    label: "Giriş",
-    dailyAiLimit: 100,
-    price: 149,
-  },
-  pro: {
-    label: "Pro",
-    dailyAiLimit: 400,
-    price: 399,
-  },
-  kurumsal: {
-    label: "Kurumsal",
-    dailyAiLimit: 2000,
-    price: 1299,
-  },
-};
+  {
+    label: string;
+    dailyAiLimit: number;
+    price: number;
+    tokenGrant: number;
+    questionBankMonthlyLimit: number | null;
+    hasExamAccess: boolean;
+  }
+>;

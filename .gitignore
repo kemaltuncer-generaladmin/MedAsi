@@ -2,9 +2,11 @@ node_modules
 .next
 .env
 .env.local
+.env.production.local
 .vercel
 *.log
 .DS_Store
 2323
 *.bak
 repomix-output.xml
+.env*.local

@@ -7,41 +7,41 @@ import { Button } from "@/components/ui/Button";
 import posthog from "posthog-js";
 
 const freeFeatures = [
-  { text: "Temel modüllere erişim", included: true },
-  { text: "Vaka RPG (sınırlı)", included: true },
-  { text: "Not alma & Flashcard", included: true },
-  { text: "AI sorgusu yok", included: false },
-  { text: "AI Tanı Asistanı", included: false },
+  { text: "75K AI token", included: true },
+  { text: "150 soru / ay", included: true },
+  { text: "Temel çalışma araçları", included: true },
+  { text: "Sınav modülleri", included: false },
+  { text: "İleri AI akışları", included: false },
   { text: "Öncelikli destek", included: false },
 ];
 
 const girisFeatures = [
-  { text: "Günlük 10 AI sorgusu", included: true },
-  { text: "AI Tanı Asistanı", included: true },
-  { text: "Vaka RPG (sınırlı)", included: true },
-  { text: "Medikal Terminal", included: true },
-  { text: "Sınırsız AI sorgusu", included: false },
+  { text: "250K AI token", included: true },
+  { text: "500 soru / ay", included: true },
+  { text: "Addon satın alma uygunluğu", included: true },
+  { text: "Sınav modülleri", included: false },
+  { text: "Sınırsız soru bankası", included: false },
   { text: "Öncelikli destek", included: false },
 ];
 
 const proFeatures = [
-  { text: "Sınırsız AI sorgusu", included: true },
+  { text: "500K AI token", included: true },
   { text: "Tüm modüllere tam erişim", included: true },
-  { text: "AI Asistan (sınırsız)", included: true },
-  { text: "Günlük Brifing", included: true },
+  { text: "Soru bankası sınırsız", included: true },
+  { text: "Tüm sınav modülleri", included: true },
   { text: "Hasta & Vaka yönetimi", included: true },
   { text: "PDF dışa aktarma", included: true },
   { text: "Özel kurumsal destek", included: false },
 ];
 
 const enterpriseFeatures = [
-  { text: "Sınırsız her şey", included: true },
-  { text: "10 kullanıcı hesabı", included: true },
+  { text: "Pro kapsamı + kurum özel policy", included: true },
+  { text: "Kullanıcı bazlı erişim kurguları", included: true },
   { text: "Özel kurumsal destek", included: true },
   { text: "Özelleştirilebilir modüller", included: true },
-  { text: "API erişimi", included: true },
-  { text: "Öncelikli AI modelleri", included: true },
-  { text: "SLA garantisi", included: true },
+  { text: "Kurum bazlı yönetim akışı", included: true },
+  { text: "Öncelikli operasyon desteği", included: true },
+  { text: "Özel kapsam düzenleme", included: true },
 ];
 
 const faqs = [
@@ -51,7 +51,7 @@ const faqs = [
   },
   {
     q: "AI sorgu limiti nasıl çalışır?",
-    a: "Her gece gece yarısı (Türkiye saatiyle 00:00) sıfırlanır. Giriş paketinde günlük 10 sorgu hakkınız bulunmaktadır. Pro ve Kurumsal planlarda sınırsız sorgu yapabilirsiniz.",
+    a: "Planlar token cüzdanı ile çalışır. Ücretsiz 75K, Giriş 250K, Pro 500K token ile gelir. Mevcut bakiye ekranından kullanımınızı takip edebilirsiniz.",
   },
   {
     q: "Kurumsal plan nedir?",
@@ -183,7 +183,7 @@ export default function UpgradePage() {
                 </p>
                 <div className="flex items-end gap-1">
                   <span className="text-4xl font-bold text-[var(--color-text-primary)]">
-                    ₺99
+                    ₺149
                   </span>
                   <span className="text-[var(--color-text-secondary)] mb-1">
                     / ay
@@ -258,7 +258,7 @@ export default function UpgradePage() {
                 </p>
                 <div className="flex items-end gap-1">
                   <span className="text-4xl font-bold text-[var(--color-text-primary)]">
-                    ₺249
+                    ₺399
                   </span>
                   <span className="text-[var(--color-text-secondary)] mb-1">
                     / ay

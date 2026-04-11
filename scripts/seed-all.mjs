@@ -18,10 +18,10 @@ const supabase = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 const prisma = new PrismaClient();
 
 const PACKAGES = [
-  { name: "Ücretsiz", dailyAiLimit: 25, price: 0, tokenGrant: 100000n },
-  { name: "Giriş", dailyAiLimit: 100, price: 149, tokenGrant: 300000n },
-  { name: "Pro", dailyAiLimit: 400, price: 399, tokenGrant: 500000n },
-  { name: "Kurumsal", dailyAiLimit: 2000, price: 1299, tokenGrant: 1000000n },
+  { name: "Ücretsiz", dailyAiLimit: 100, price: 0, tokenGrant: 75000n },
+  { name: "Giriş", dailyAiLimit: 100, price: 149, tokenGrant: 250000n },
+  { name: "Pro", dailyAiLimit: 100, price: 399, tokenGrant: 500000n },
+  { name: "Kurumsal", dailyAiLimit: 100, price: 1299, tokenGrant: 500000n },
 ];
 
 const MODULES = [

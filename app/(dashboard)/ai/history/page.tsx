@@ -1,360 +1,238 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { Card, CardHeader, CardTitle, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
+import { useEffect, useMemo, useState } from "react";
 import {
+  Clock,
+  Filter,
   History,
   Search,
   Trash2,
-  ChevronDown,
-  ChevronRight,
   Zap,
-  Clock,
-  Filter,
-  MessageSquare,
 } from "lucide-react";
 import toast from "react-hot-toast";
+import { AccountSubpageShell } from "@/components/account/AccountSubpageShell";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
 
-const HISTORY_KEY = "medasi_ai_history_v1";
+const HIDDEN_HISTORY_IDS_KEY = "medasi_ai_history_hidden_ids_v2";
 
-interface AIEntry {
+type HistoryItem = {
   id: string;
-  query: string;
-  response: string;
   model: "FAST" | "EFFICIENT";
-  timestamp: string;
-  tokens: number;
-  context: string;
-}
-
-const SAMPLE_ENTRIES: AIEntry[] = [
-  {
-    id: "demo_1",
-    query:
-      "Akut miyokard enfarktüsünde ST elevasyonunun önemi ve ayırıcı tanı kriterleri nelerdir?",
-    response:
-      "ST elevasyonu, miyokard hasarının erken göstergesidir. STEMI tanısı için iki veya daha fazla ardışık derivasyonda ≥1 mm ST elevasyonu gereklidir. V1-V4 derivasyonlarında elevasyon anterior MI, II, III, aVF derivasyonlarında ise inferior MI düşündürür. Ayırıcı tanıda perikarditis, Brugada sendromu ve sol ventrikül anevrizması göz önünde bulundurulmalıdır.",
-    model: "FAST",
-    timestamp: new Date(Date.now() - 86400000).toISOString(),
-    tokens: 342,
-    context: "EKG Değerlendirme",
-  },
-  {
-    id: "demo_2",
-    query: "Sepsis tanı kriterleri ve SOFA skoru hesaplama",
-    response:
-      "Sepsis, enfeksiyona karşı disregüle konakçı yanıtından kaynaklanan hayatı tehdit eden organ disfonksiyonudur. SOFA skoru; solunum (PaO2/FiO2), koagülasyon (trombosit), karaciğer (bilirubin), kardiyovasküler, SSS (GCS) ve renal (kreatinin) parametrelerini değerlendirir.",
-    model: "EFFICIENT",
-    timestamp: new Date(Date.now() - 172800000).toISOString(),
-    tokens: 198,
-    context: "Klinik Karar",
-  },
-];
+  modelName: string;
+  tokensUsed: number;
+  module: string;
+  createdAt: string;
+};
 
 function formatRelative(iso: string): string {
   const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 60) return `${mins} dakika önce`;
-  const hours = Math.floor(mins / 60);
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 60) return `${minutes} dk önce`;
+  const hours = Math.floor(minutes / 60);
   if (hours < 24) return `${hours} saat önce`;
   const days = Math.floor(hours / 24);
   return `${days} gün önce`;
 }
 
 export default function AIHistoryPage() {
-  const [entries, setEntries] = useState<AIEntry[]>([]);
+  const [entries, setEntries] = useState<HistoryItem[]>([]);
+  const [hiddenIds, setHiddenIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
-  const [modelFilter, setModelFilter] = useState<"all" | "FAST" | "EFFICIENT">(
-    "all",
-  );
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [modelFilter, setModelFilter] = useState<"all" | "FAST" | "EFFICIENT">("all");
 
   useEffect(() => {
+    try {
+      const raw = localStorage.getItem(HIDDEN_HISTORY_IDS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as string[];
+        setHiddenIds(new Set(parsed));
+      }
+    } catch {
+      setHiddenIds(new Set());
+    }
+
     async function fetchHistory() {
       try {
-        const res = await fetch("/api/ai/history?limit=50");
-        if (!res.ok) throw new Error("API hatası");
-        const data = await res.json();
-        const mapped: AIEntry[] = (data.history ?? []).map(
-          (h: {
-            id: string;
-            model: "FAST" | "EFFICIENT";
-            tokensUsed: number;
-            module: string;
-            createdAt: string;
-          }) => ({
-            id: h.id,
-            query: `${h.module} modülü`,
-            response: "",
-            model: h.model,
-            timestamp: h.createdAt,
-            tokens: h.tokensUsed,
-            context: h.module,
-          }),
-        );
-        setEntries(mapped.length > 0 ? mapped : SAMPLE_ENTRIES);
+        const res = await fetch("/api/ai/history?limit=80", { cache: "no-store" });
+        if (!res.ok) throw new Error("AI geçmişi yüklenemedi");
+        const data = (await res.json()) as { history?: HistoryItem[] };
+        setEntries(Array.isArray(data.history) ? data.history : []);
       } catch {
-        setEntries(SAMPLE_ENTRIES);
+        toast.error("AI geçmişi yüklenemedi");
       } finally {
         setLoading(false);
       }
     }
-    fetchHistory();
+
+    void fetchHistory();
   }, []);
 
-  function handleClear() {
-    toast("Bu özellik yakında aktif olacak", { icon: "⏳" });
+  useEffect(() => {
+    localStorage.setItem(HIDDEN_HISTORY_IDS_KEY, JSON.stringify(Array.from(hiddenIds)));
+  }, [hiddenIds]);
+
+  function handleClearVisible() {
+    const visibleIds = filteredEntries.map((item) => item.id);
+    if (visibleIds.length === 0) {
+      toast("Temizlenecek kayıt bulunamadı");
+      return;
+    }
+
+    setHiddenIds((prev) => {
+      const next = new Set(prev);
+      visibleIds.forEach((id) => next.add(id));
+      return next;
+    });
+    toast.success("Görünüm temizlendi");
   }
 
-  function toggleExpand(id: string) {
-    setExpanded((prev) => (prev === id ? null : id));
+  function handleRestore() {
+    setHiddenIds(new Set());
+    toast.success("Geçmiş görünümü geri alındı");
   }
 
-  const filtered = entries.filter((e) => {
-    const matchModel = modelFilter === "all" || e.model === modelFilter;
-    const matchSearch =
-      e.query.toLowerCase().includes(search.toLowerCase()) ||
-      e.context.toLowerCase().includes(search.toLowerCase());
-    return matchModel && matchSearch;
-  });
+  const visibleEntries = useMemo(
+    () => entries.filter((item) => !hiddenIds.has(item.id)),
+    [entries, hiddenIds],
+  );
+
+  const filteredEntries = useMemo(() => {
+    return visibleEntries.filter((item) => {
+      const modelMatch = modelFilter === "all" || item.model === modelFilter;
+      const haystack = `${item.module} ${item.modelName}`.toLowerCase();
+      const searchMatch = haystack.includes(search.trim().toLowerCase());
+      return modelMatch && searchMatch;
+    });
+  }, [visibleEntries, modelFilter, search]);
+
+  const fastCount = filteredEntries.filter((item) => item.model === "FAST").length;
+  const efficientCount = filteredEntries.filter((item) => item.model === "EFFICIENT").length;
+  const tokenSum = filteredEntries.reduce((sum, item) => sum + item.tokensUsed, 0);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-[200px]">
-        <div className="animate-spin w-6 h-6 border-2 border-[var(--color-primary)] border-t-transparent rounded-full" />
+      <div className="space-y-3">
+        <div className="h-32 animate-pulse rounded-3xl bg-[var(--color-surface-elevated)]" />
+        <div className="h-20 animate-pulse rounded-3xl bg-[var(--color-surface-elevated)]" />
+        <div className="h-20 animate-pulse rounded-3xl bg-[var(--color-surface-elevated)]" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <div className="w-10 h-10 rounded-xl bg-[var(--color-primary)]/10 flex items-center justify-center">
-              <History size={20} className="text-[var(--color-primary)]" />
-            </div>
-            <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
-              AI Sorgu Geçmişi
-            </h1>
-          </div>
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            Önceki yapay zeka sorgularınızı görüntüleyin ve yönetin
-          </p>
-        </div>
-        {entries.length > 0 && (
+    <AccountSubpageShell
+      icon={History}
+      title="AI Geçmişi"
+      description="Son AI kullanım kayıtlarınızı filtreleyin, inceleyin ve görünümden temizleyin."
+      stats={[
+        { label: "Kayıt", value: String(filteredEntries.length) },
+        { label: "FAST", value: String(fastCount) },
+        { label: "EFFICIENT", value: String(efficientCount) },
+        { label: "Toplam token", value: tokenSum.toLocaleString("tr-TR") },
+      ]}
+      actions={
+        <>
           <Button
             variant="ghost"
             size="sm"
-            className="border border-[var(--color-border)] shrink-0"
-            onClick={handleClear}
+            className="border border-[var(--color-border)]"
+            onClick={handleRestore}
+            disabled={hiddenIds.size === 0}
+          >
+            Geri al
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="border border-[var(--color-border)]"
+            onClick={handleClearVisible}
+            disabled={filteredEntries.length === 0}
           >
             <Trash2 size={14} />
-            Geçmişi Temizle
+            Görünümü temizle
           </Button>
-        )}
-      </div>
+        </>
+      }
+    >
+      <Card variant="bordered" className="rounded-3xl">
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2">
+            <div className="relative min-w-[220px] flex-1">
+              <Search
+                size={14}
+                className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]"
+              />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Modül veya model ara"
+                className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-elevated)] py-2 pl-9 pr-3 text-sm"
+              />
+            </div>
 
-      {/* Filtreler */}
-      <div className="flex flex-wrap gap-2">
-        <div className="relative flex-1 min-w-48">
-          <Search
-            size={14}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-text-secondary)]"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Sorgu veya bağlam ara..."
-            className="w-full bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg pl-9 pr-3 py-2 text-sm text-[var(--color-text-primary)] placeholder:text-[var(--color-text-secondary)] focus:outline-none focus:border-[var(--color-primary)] transition-colors"
-          />
-        </div>
-        <div className="flex items-center gap-1 bg-[var(--color-surface)] border border-[var(--color-border)] rounded-lg p-1">
-          <Filter
-            size={12}
-            className="text-[var(--color-text-secondary)] ml-1"
-          />
-          {(["all", "FAST", "EFFICIENT"] as const).map((f) => (
-            <button
-              key={f}
-              onClick={() => setModelFilter(f)}
-              className={[
-                "px-3 py-1 rounded-md text-xs font-medium transition-colors",
-                modelFilter === f
-                  ? "bg-[var(--color-primary)] text-black"
-                  : "text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]",
-              ].join(" ")}
-            >
-              {f === "all" ? "Tümü" : f}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* İstatistikler */}
-      {entries.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
-          <Card variant="bordered" className="p-3">
-            <p className="text-xs text-[var(--color-text-secondary)] mb-1">
-              Toplam Sorgu
-            </p>
-            <p className="text-xl font-bold text-[var(--color-text-primary)]">
-              {entries.length}
-            </p>
-          </Card>
-          <Card variant="bordered" className="p-3">
-            <p className="text-xs text-[var(--color-text-secondary)] mb-1">
-              FAST Sorgu
-            </p>
-            <p className="text-xl font-bold text-[var(--color-primary)]">
-              {entries.filter((e) => e.model === "FAST").length}
-            </p>
-          </Card>
-          <Card variant="bordered" className="p-3">
-            <p className="text-xs text-[var(--color-text-secondary)] mb-1">
-              EFFICIENT Sorgu
-            </p>
-            <p
-              className="text-xl font-bold"
-              style={{ color: "var(--color-warning)" }}
-            >
-              {entries.filter((e) => e.model === "EFFICIENT").length}
-            </p>
-          </Card>
-        </div>
-      )}
-
-      {/* Liste */}
-      {filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 gap-3">
-          <div className="w-14 h-14 rounded-full bg-[var(--color-surface-elevated)] flex items-center justify-center">
-            <MessageSquare
-              size={24}
-              className="text-[var(--color-text-secondary)]"
-            />
+            <div className="inline-flex items-center gap-1 rounded-xl border border-[var(--color-border)] p-1">
+              <Filter size={12} className="ml-1 text-[var(--color-text-secondary)]" />
+              {(["all", "FAST", "EFFICIENT"] as const).map((option) => (
+                <button
+                  key={option}
+                  onClick={() => setModelFilter(option)}
+                  className={[
+                    "rounded-md px-3 py-1 text-xs font-medium",
+                    modelFilter === option
+                      ? "bg-[var(--color-primary)] text-black"
+                      : "text-[var(--color-text-secondary)]",
+                  ].join(" ")}
+                >
+                  {option === "all" ? "Tümü" : option}
+                </button>
+              ))}
+            </div>
           </div>
-          <p className="text-sm font-medium text-[var(--color-text-primary)]">
-            {entries.length === 0
-              ? "Henüz AI sorgusu yapılmadı"
-              : "Sonuç bulunamadı"}
-          </p>
-          <p className="text-xs text-[var(--color-text-secondary)]">
-            {entries.length === 0
-              ? "AI özelliğini kullandıktan sonra sorgu geçmişiniz burada görünecek"
-              : "Farklı bir arama terimi deneyin"}
-          </p>
-        </div>
+        </CardContent>
+      </Card>
+
+      {filteredEntries.length === 0 ? (
+        <Card variant="bordered" className="rounded-3xl">
+          <CardContent className="py-10 text-center text-sm text-[var(--color-text-secondary)]">
+            Filtreye uygun kayıt bulunamadı.
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map((entry) => (
-            <Card
-              key={entry.id}
-              variant="bordered"
-              className="p-0 overflow-hidden hover:border-[var(--color-primary)]/30 transition-colors"
-            >
-              <button
-                className="w-full text-left p-4"
-                onClick={() => toggleExpand(entry.id)}
-              >
-                <div className="flex items-start gap-3">
-                  <div
-                    className="w-8 h-8 rounded-lg flex items-center justify-center shrink-0 mt-0.5"
-                    style={{
-                      background:
-                        entry.model === "FAST"
-                          ? "var(--color-primary)"
-                          : "var(--color-warning)",
-                      opacity: 0.15,
-                    }}
-                  />
-                  <div className="absolute mt-0.5 ml-0.5 w-8 h-8 flex items-center justify-center">
-                    <Zap
-                      size={14}
-                      style={{
-                        color:
-                          entry.model === "FAST"
-                            ? "var(--color-primary)"
-                            : "var(--color-warning)",
-                      }}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-[var(--color-text-primary)] truncate pr-8">
-                      {entry.query.length > 80
-                        ? entry.query.slice(0, 80) + "..."
-                        : entry.query}
-                    </p>
-                    <div className="flex flex-wrap items-center gap-2 mt-1.5">
-                      <Badge
-                        variant={entry.model === "FAST" ? "default" : "warning"}
-                        className="text-xs"
-                      >
-                        {entry.model}
-                      </Badge>
-                      <span className="text-xs text-[var(--color-text-secondary)] flex items-center gap-1">
-                        <Clock size={10} />
-                        {formatRelative(entry.timestamp)}
-                      </span>
-                      <span className="text-xs text-[var(--color-text-secondary)]">
-                        {entry.tokens} token
-                      </span>
-                      {entry.context && (
-                        <Badge variant="secondary" className="text-xs">
-                          {entry.context}
-                        </Badge>
-                      )}
-                    </div>
-                  </div>
-                  <div className="shrink-0">
-                    {expanded === entry.id ? (
-                      <ChevronDown
-                        size={16}
-                        className="text-[var(--color-text-secondary)]"
-                      />
-                    ) : (
-                      <ChevronRight
-                        size={16}
-                        className="text-[var(--color-text-secondary)]"
-                      />
-                    )}
-                  </div>
-                </div>
-              </button>
-
-              {expanded === entry.id && (
-                <div className="border-t border-[var(--color-border)] p-4 space-y-4">
-                  <div>
-                    <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2 uppercase tracking-wider">
-                      Sorgu
-                    </p>
-                    <p className="text-sm text-[var(--color-text-primary)] bg-[var(--color-surface-elevated)] rounded-lg p-3">
-                      {entry.query}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-xs font-medium text-[var(--color-text-secondary)] mb-2 uppercase tracking-wider">
-                      Yanıt
-                    </p>
-                    <p className="text-sm text-[var(--color-text-secondary)] bg-[var(--color-surface-elevated)] rounded-lg p-3 leading-relaxed">
-                      {entry.response}
-                    </p>
-                  </div>
-                  <div className="flex gap-4 text-xs text-[var(--color-text-secondary)]">
-                    <span>
-                      {new Date(entry.timestamp).toLocaleString("tr-TR")}
+          {filteredEntries.map((entry) => (
+            <Card key={entry.id} variant="bordered" className="rounded-3xl p-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant={entry.model === "FAST" ? "default" : "warning"}>
+                      {entry.model}
+                    </Badge>
+                    <Badge variant="outline">{entry.module}</Badge>
+                    <span className="inline-flex items-center gap-1 text-xs text-[var(--color-text-secondary)]">
+                      <Clock size={11} />
+                      {formatRelative(entry.createdAt)}
                     </span>
-                    <span>·</span>
-                    <span>{entry.tokens} token kullanıldı</span>
                   </div>
+                  <p className="text-sm text-[var(--color-text-secondary)]">{entry.modelName}</p>
                 </div>
-              )}
+
+                <div className="text-right">
+                  <p className="inline-flex items-center gap-1 text-sm font-semibold text-[var(--color-primary)]">
+                    <Zap size={13} />
+                    {entry.tokensUsed.toLocaleString("tr-TR")} token
+                  </p>
+                  <p className="mt-0.5 text-xs text-[var(--color-text-secondary)]">
+                    {new Date(entry.createdAt).toLocaleString("tr-TR")}
+                  </p>
+                </div>
+              </div>
             </Card>
           ))}
         </div>
       )}
-    </div>
+    </AccountSubpageShell>
   );
 }

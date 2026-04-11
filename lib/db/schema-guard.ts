@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-type GuardKey = "materials" | "addons" | "support" | "usage";
+type GuardKey = "materials" | "addons" | "support" | "usage" | "study-core";
 
 const guardState = globalThis as typeof globalThis & {
   __medasiSchemaGuardPromises__?: Partial<Record<GuardKey, Promise<void>>>;
@@ -51,7 +51,15 @@ export async function ensureMaterialsSchema(): Promise<void> {
       `ALTER TABLE public.user_materials
         ADD COLUMN IF NOT EXISTS managed_drive_file_id text,
         ADD COLUMN IF NOT EXISTS managed_drive_processed_file_id text,
-        ADD COLUMN IF NOT EXISTS managed_drive_archive_file_id text`,
+        ADD COLUMN IF NOT EXISTS managed_drive_archive_file_id text,
+        ADD COLUMN IF NOT EXISTS processing_stage text NOT NULL DEFAULT 'queued',
+        ADD COLUMN IF NOT EXISTS last_analyzed_at timestamptz,
+        ADD COLUMN IF NOT EXISTS quality_score int,
+        ADD COLUMN IF NOT EXISTS extraction_confidence int,
+        ADD COLUMN IF NOT EXISTS slide_count int,
+        ADD COLUMN IF NOT EXISTS ready_for_questions boolean NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS ready_for_flashcards boolean NOT NULL DEFAULT false,
+        ADD COLUMN IF NOT EXISTS summary_version int NOT NULL DEFAULT 1`,
       `CREATE INDEX IF NOT EXISTS idx_user_materials_user_created_at
         ON public.user_materials (user_id, created_at DESC)`,
       `CREATE INDEX IF NOT EXISTS idx_user_materials_user_status
@@ -98,6 +106,62 @@ export async function ensureMaterialsSchema(): Promise<void> {
       )`,
       `CREATE INDEX IF NOT EXISTS idx_user_material_marks_user_material
         ON public.user_material_marks (user_id, material_id, created_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.user_material_analysis (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        material_id text NOT NULL REFERENCES public.user_materials(id) ON DELETE CASCADE,
+        summary text,
+        quality_score int,
+        extraction_confidence int,
+        slide_count int,
+        chunk_coverage int,
+        readability_score int,
+        density_score int,
+        exam_relevance_score int,
+        clinical_relevance_score int,
+        flashcard_readiness int,
+        question_readiness int,
+        strengths jsonb NOT NULL DEFAULT '[]'::jsonb,
+        issues jsonb NOT NULL DEFAULT '[]'::jsonb,
+        recommendations jsonb NOT NULL DEFAULT '[]'::jsonb,
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(material_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_material_analysis_user_material
+        ON public.user_material_analysis (user_id, material_id)`,
+      `CREATE TABLE IF NOT EXISTS public.user_material_slide_insights (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        material_id text NOT NULL REFERENCES public.user_materials(id) ON DELETE CASCADE,
+        slide_no int NOT NULL,
+        title text,
+        extracted_text text NOT NULL DEFAULT '',
+        text_density int NOT NULL DEFAULT 0,
+        quality_score int NOT NULL DEFAULT 0,
+        has_visual_gap boolean NOT NULL DEFAULT false,
+        duplicate_risk boolean NOT NULL DEFAULT false,
+        key_points jsonb NOT NULL DEFAULT '[]'::jsonb,
+        warnings jsonb NOT NULL DEFAULT '[]'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(material_id, slide_no)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_material_slide_insights_material
+        ON public.user_material_slide_insights (material_id, slide_no)`,
+      `CREATE TABLE IF NOT EXISTS public.user_material_processing_events (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        material_id text NOT NULL REFERENCES public.user_materials(id) ON DELETE CASCADE,
+        stage text NOT NULL,
+        status text NOT NULL,
+        message text,
+        details jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_material_processing_events_material
+        ON public.user_material_processing_events (material_id, created_at DESC)`,
       `DROP FUNCTION IF EXISTS public.insert_user_document_chunk(
         text,
         text,
@@ -150,6 +214,99 @@ export async function ensureMaterialsSchema(): Promise<void> {
       END;
       $$;
     `);
+  });
+}
+
+export async function ensureStudyCoreSchema(): Promise<void> {
+  return oncePerProcess("study-core", async () => {
+    await ensureMaterialsSchema();
+    await runRawStatements([
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `CREATE TABLE IF NOT EXISTS public.user_wrong_questions (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        source_question_id text,
+        subject text NOT NULL,
+        difficulty text NOT NULL DEFAULT 'Orta',
+        question_text text NOT NULL,
+        options jsonb NOT NULL DEFAULT '[]'::jsonb,
+        correct_answer int NOT NULL DEFAULT 0,
+        user_answer int NOT NULL DEFAULT 0,
+        explanation text,
+        learned boolean NOT NULL DEFAULT false,
+        added_at timestamptz NOT NULL DEFAULT now(),
+        learned_at timestamptz,
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_wrong_questions_user_added
+        ON public.user_wrong_questions (user_id, added_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_user_wrong_questions_user_learned
+        ON public.user_wrong_questions (user_id, learned)`,
+      `CREATE TABLE IF NOT EXISTS public.user_flashcard_decks (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        name text NOT NULL,
+        subject text NOT NULL DEFAULT 'Genel',
+        color text NOT NULL DEFAULT '#6366f1',
+        source text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_flashcard_decks_user_updated
+        ON public.user_flashcard_decks (user_id, updated_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.user_flashcard_cards (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        deck_id text NOT NULL REFERENCES public.user_flashcard_decks(id) ON DELETE CASCADE,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        front text NOT NULL,
+        back text NOT NULL,
+        rating text NOT NULL DEFAULT 'unknown',
+        position int NOT NULL DEFAULT 0,
+        next_review timestamptz,
+        last_studied_at timestamptz,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_flashcard_cards_user_review
+        ON public.user_flashcard_cards (user_id, next_review, updated_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.user_flashcard_reviews (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        card_id text NOT NULL REFERENCES public.user_flashcard_cards(id) ON DELETE CASCADE,
+        rating text NOT NULL,
+        reviewed_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_flashcard_reviews_user_time
+        ON public.user_flashcard_reviews (user_id, reviewed_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.user_study_plans (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        week_key text NOT NULL,
+        source_summary text NOT NULL DEFAULT '',
+        content text NOT NULL,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(user_id, week_key)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_study_plans_user_week
+        ON public.user_study_plans (user_id, week_key DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.user_study_recommendations (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        kind text NOT NULL,
+        title text NOT NULL,
+        body text NOT NULL,
+        href text,
+        score int NOT NULL DEFAULT 0,
+        metadata jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        expires_at timestamptz,
+        dismissed_at timestamptz
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_user_study_recommendations_user_active
+        ON public.user_study_recommendations (user_id, dismissed_at, expires_at, score DESC)`,
+    ]);
   });
 }
 

@@ -1,464 +1,288 @@
-'use client'
+"use client";
 
-import { useEffect, useState, useCallback } from 'react'
-import toast from 'react-hot-toast'
+import { useEffect, useState, useTransition } from "react";
+import toast from "react-hot-toast";
+import { RefreshCw, Save, ShieldCheck } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
 import {
-  Package, Users, TrendingUp,
-  Save, RefreshCw, Layers, DollarSign
-} from 'lucide-react'
-import { Badge } from '@/components/ui/Badge'
-import { Button } from '@/components/ui/Button'
-import { getPackagesWithCount, updatePackage } from '@/lib/actions/admin'
+  getAdminPackagePolicies,
+  savePackagePolicyOverrides,
+  seedCanonicalPackagesFromPolicy,
+} from "@/lib/actions/policy-admin";
 
-type PackageWithCount = {
-  id: string
-  name: string
-  dailyAiLimit: number
-  price: number
-  _count: { users: number }
-}
+type PolicyRow = {
+  tier: "ucretsiz" | "giris" | "pro" | "kurumsal";
+  displayName: string;
+  monthlyPrice: number;
+  initialTokenGrant: number;
+  questionBankMonthlyLimit: number | null;
+  hasExamAccess: boolean;
+  hasUnlimitedQuestionBank: boolean;
+  canBuyAddons: boolean;
+};
 
-type EditState = {
-  dailyAiLimit: string
-  price: string
-}
-
-const PACKAGE_CONFIG: Record<string, {
-  badgeVariant: 'default' | 'success' | 'warning'
-  borderColor: string
-  accentColor: string
-  label: string
-  description: string
-}> = {
-  'Öğrenci': {
-    badgeVariant: 'default',
-    borderColor: 'var(--color-primary)',
-    accentColor: 'var(--color-primary)',
-    label: 'Öğrenci',
-    description: 'Tıp öğrencileri için temel paket',
-  },
-  'Klinik Pro': {
-    badgeVariant: 'success',
-    borderColor: 'var(--color-success)',
-    accentColor: 'var(--color-success)',
-    label: 'Klinik Pro',
-    description: 'Klinisyenler için gelişmiş paket',
-  },
-  'Kurumsal': {
-    badgeVariant: 'warning',
-    borderColor: 'var(--color-warning)',
-    accentColor: 'var(--color-warning)',
-    label: 'Kurumsal',
-    description: 'Kurumlar için tam özellikli paket',
-  },
-}
-
-function getConfig(name: string) {
-  return PACKAGE_CONFIG[name] ?? {
-    badgeVariant: 'secondary' as const,
-    borderColor: 'var(--color-border)',
-    accentColor: 'var(--color-text-secondary)',
-    label: name,
-    description: '',
+type EditablePolicyState = Record<
+  PolicyRow["tier"],
+  {
+    monthlyPrice: string;
+    initialTokenGrant: string;
+    questionBankMonthlyLimit: string;
+    hasExamAccess: boolean;
+    hasUnlimitedQuestionBank: boolean;
+    canBuyAddons: boolean;
   }
-}
+>;
 
-function formatTR(value: number, decimals = 0) {
-  return value.toLocaleString('tr-TR', {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  })
-}
+const EMPTY_STATE: EditablePolicyState = {
+  ucretsiz: {
+    monthlyPrice: "0",
+    initialTokenGrant: "75000",
+    questionBankMonthlyLimit: "150",
+    hasExamAccess: false,
+    hasUnlimitedQuestionBank: false,
+    canBuyAddons: true,
+  },
+  giris: {
+    monthlyPrice: "149",
+    initialTokenGrant: "250000",
+    questionBankMonthlyLimit: "500",
+    hasExamAccess: false,
+    hasUnlimitedQuestionBank: false,
+    canBuyAddons: true,
+  },
+  pro: {
+    monthlyPrice: "399",
+    initialTokenGrant: "500000",
+    questionBankMonthlyLimit: "",
+    hasExamAccess: true,
+    hasUnlimitedQuestionBank: true,
+    canBuyAddons: true,
+  },
+  kurumsal: {
+    monthlyPrice: "1299",
+    initialTokenGrant: "500000",
+    questionBankMonthlyLimit: "",
+    hasExamAccess: true,
+    hasUnlimitedQuestionBank: true,
+    canBuyAddons: true,
+  },
+};
 
-export default function PackagesPage() {
-  const [packages, setPackages] = useState<PackageWithCount[]>([])
-  const [loading, setLoading] = useState(true)
-  const [editStates, setEditStates] = useState<Record<string, EditState>>({})
-  const [savingIds, setSavingIds] = useState<Set<string>>(new Set())
-  const [dirtyIds, setDirtyIds] = useState<Set<string>>(new Set())
+export default function AdminPackagesPage() {
+  const [policies, setPolicies] = useState<PolicyRow[]>([]);
+  const [form, setForm] = useState<EditablePolicyState>(EMPTY_STATE);
+  const [loading, setLoading] = useState(true);
+  const [isPending, startTransition] = useTransition();
 
-  const loadPackages = useCallback(async () => {
-    setLoading(true)
+  async function load() {
+    setLoading(true);
     try {
-      const data = await getPackagesWithCount()
-      setPackages(data)
-      const initial: Record<string, EditState> = {}
-      data.forEach((pkg) => {
-        initial[pkg.id] = {
-          dailyAiLimit: String(pkg.dailyAiLimit),
-          price: String(pkg.price),
-        }
-      })
-      setEditStates(initial)
-      setDirtyIds(new Set())
+      const data = await getAdminPackagePolicies();
+      const next = { ...EMPTY_STATE };
+      for (const policy of data.policies) {
+        next[policy.tier] = {
+          monthlyPrice: String(policy.monthlyPrice),
+          initialTokenGrant: String(policy.initialTokenGrant),
+          questionBankMonthlyLimit:
+            policy.questionBankMonthlyLimit === null
+              ? ""
+              : String(policy.questionBankMonthlyLimit),
+          hasExamAccess: policy.hasExamAccess,
+          hasUnlimitedQuestionBank: policy.hasUnlimitedQuestionBank,
+          canBuyAddons: policy.canBuyAddons,
+        };
+      }
+      setPolicies(data.policies);
+      setForm(next);
     } catch {
-      toast.error('Paketler yüklenemedi')
+      toast.error("Paket politikaları yüklenemedi.");
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [])
+  }
 
   useEffect(() => {
-    loadPackages()
-  }, [loadPackages])
+    void load();
+  }, []);
 
-  function handleFieldChange(id: string, field: keyof EditState, value: string) {
-    setEditStates((prev) => ({
+  function update<T extends keyof EditablePolicyState["ucretsiz"]>(
+    tier: PolicyRow["tier"],
+    key: T,
+    value: EditablePolicyState["ucretsiz"][T],
+  ) {
+    setForm((prev) => ({
       ...prev,
-      [id]: { ...prev[id], [field]: value },
-    }))
-    setDirtyIds((prev) => new Set([...prev, id]))
+      [tier]: { ...prev[tier], [key]: value },
+    }));
   }
 
-  async function handleSave(pkg: PackageWithCount) {
-    const state = editStates[pkg.id]
-    if (!state) return
-
-    const dailyAiLimit = parseInt(state.dailyAiLimit, 10)
-    const price = parseFloat(state.price)
-
-    if (isNaN(dailyAiLimit) || dailyAiLimit < 0) {
-      toast.error('Günlük AI limiti geçerli bir sayı olmalıdır')
-      return
-    }
-    if (isNaN(price) || price < 0) {
-      toast.error('Fiyat geçerli bir sayı olmalıdır')
-      return
-    }
-
-    setSavingIds((prev) => new Set([...prev, pkg.id]))
-    try {
-      await updatePackage(pkg.id, { dailyAiLimit, price })
-      setPackages((prev) =>
-        prev.map((p) =>
-          p.id === pkg.id ? { ...p, dailyAiLimit, price } : p
-        )
-      )
-      setDirtyIds((prev) => {
-        const next = new Set(prev)
-        next.delete(pkg.id)
-        return next
-      })
-      toast.success(`${pkg.name} paketi güncellendi`)
-    } catch {
-      toast.error('Güncelleme başarısız oldu')
-    } finally {
-      setSavingIds((prev) => {
-        const next = new Set(prev)
-        next.delete(pkg.id)
-        return next
-      })
-    }
+  function save() {
+    startTransition(async () => {
+      try {
+        await savePackagePolicyOverrides({
+          ucretsiz: {
+            monthlyPrice: Number(form.ucretsiz.monthlyPrice),
+            initialTokenGrant: Number(form.ucretsiz.initialTokenGrant),
+            questionBankMonthlyLimit: Number(form.ucretsiz.questionBankMonthlyLimit || "0"),
+            hasExamAccess: form.ucretsiz.hasExamAccess,
+            hasUnlimitedQuestionBank: form.ucretsiz.hasUnlimitedQuestionBank,
+            canBuyAddons: form.ucretsiz.canBuyAddons,
+          },
+          giris: {
+            monthlyPrice: Number(form.giris.monthlyPrice),
+            initialTokenGrant: Number(form.giris.initialTokenGrant),
+            questionBankMonthlyLimit: Number(form.giris.questionBankMonthlyLimit || "0"),
+            hasExamAccess: form.giris.hasExamAccess,
+            hasUnlimitedQuestionBank: form.giris.hasUnlimitedQuestionBank,
+            canBuyAddons: form.giris.canBuyAddons,
+          },
+          pro: {
+            monthlyPrice: Number(form.pro.monthlyPrice),
+            initialTokenGrant: Number(form.pro.initialTokenGrant),
+            questionBankMonthlyLimit: form.pro.questionBankMonthlyLimit
+              ? Number(form.pro.questionBankMonthlyLimit)
+              : null,
+            hasExamAccess: form.pro.hasExamAccess,
+            hasUnlimitedQuestionBank: form.pro.hasUnlimitedQuestionBank,
+            canBuyAddons: form.pro.canBuyAddons,
+          },
+          kurumsal: {
+            monthlyPrice: Number(form.kurumsal.monthlyPrice),
+            initialTokenGrant: Number(form.kurumsal.initialTokenGrant),
+            questionBankMonthlyLimit: form.kurumsal.questionBankMonthlyLimit
+              ? Number(form.kurumsal.questionBankMonthlyLimit)
+              : null,
+            hasExamAccess: form.kurumsal.hasExamAccess,
+            hasUnlimitedQuestionBank: form.kurumsal.hasUnlimitedQuestionBank,
+            canBuyAddons: form.kurumsal.canBuyAddons,
+          },
+        });
+        await seedCanonicalPackagesFromPolicy();
+        toast.success("Paket politikaları güncellendi.");
+        await load();
+      } catch {
+        toast.error("Paket politikaları kaydedilemedi.");
+      }
+    });
   }
-
-  function handleBlurSave(pkg: PackageWithCount) {
-    if (dirtyIds.has(pkg.id)) {
-      handleSave(pkg)
-    }
-  }
-
-  const totalRevenue = packages.reduce(
-    (sum, pkg) => sum + pkg.price * pkg._count.users,
-    0
-  )
 
   return (
-    <div
-      className="space-y-6"
-      style={{ animation: 'adminFadeIn 300ms ease forwards' }}
-    >
-      <style>{`
-        @keyframes adminFadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to   { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
-
-      {/* Page title */}
-      <div className="flex items-start justify-between gap-4 flex-wrap py-2 px-1">
+    <div className="space-y-6">
+      <div className="flex items-center justify-between gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-bold" style={{ color: 'var(--color-text-primary)' }}>
-            Paket Yönetimi
+          <h1 className="text-2xl font-bold text-[var(--color-text-primary)]">
+            Paket Politikaları
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: 'var(--color-text-secondary)' }}>
-            Abonelik paketlerini görüntüleyin ve düzenleyin. Değişiklikler otomatik kaydedilir.
+          <p className="text-sm text-[var(--color-text-secondary)] mt-1">
+            Fiyat, token grant, soru bankası limiti ve sınav erişimini tek merkezden yönetin.
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="ghost" size="sm" onClick={loadPackages} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+          <Button variant="ghost" size="sm" onClick={() => void load()} disabled={loading || isPending}>
+            <RefreshCw size={14} className={loading ? "animate-spin" : ""} />
             Yenile
+          </Button>
+          <Button size="sm" onClick={save} loading={isPending}>
+            <Save size={14} />
+            Kaydet
           </Button>
         </div>
       </div>
 
-        {/* Loading skeleton */}
-        {loading ? (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((i) => (
-              <div
-                key={i}
-                className="bg-[var(--color-surface-elevated)] rounded-xl h-72 animate-pulse"
-                style={{ borderTop: '3px solid var(--color-border)' }}
-              />
-            ))}
-          </div>
-        ) : (
-          <>
-            {/* Package cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {packages.map((pkg) => {
-                const config = getConfig(pkg.name)
-                const state = editStates[pkg.id] ?? {
-                  dailyAiLimit: String(pkg.dailyAiLimit),
-                  price: String(pkg.price),
-                }
-                const isSaving = savingIds.has(pkg.id)
-                const isDirty = dirtyIds.has(pkg.id)
-                const currentLimit = parseInt(state.dailyAiLimit, 10) || 0
-                const currentPrice = parseFloat(state.price) || 0
-                const revenue = currentPrice * pkg._count.users
-
-                return (
-                  <div
-                    key={pkg.id}
-                    className="bg-[var(--color-surface-elevated)] rounded-xl overflow-hidden flex flex-col"
-                    style={{ borderTop: `3px solid ${config.borderColor}` }}
-                  >
-                    {/* Card header */}
-                    <div className="p-5 pb-4 border-b border-[var(--color-border)]">
-                      <div className="flex items-start justify-between gap-2 mb-3">
-                        <h2
-                          className="text-xl font-bold"
-                          style={{ color: config.accentColor }}
-                        >
-                          {pkg.name}
-                        </h2>
-                        <Badge variant={config.badgeVariant}>{config.label}</Badge>
-                      </div>
-                      <p className="text-xs text-[var(--color-text-secondary)] mb-3">{config.description}</p>
-                      <div className="flex items-center gap-1.5">
-                        <Users size={13} className="text-[var(--color-text-secondary)]" />
-                        <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-                          {formatTR(pkg._count.users)} kullanıcı
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Editable fields */}
-                    <div className="p-5 space-y-4 flex-1">
-                      <div>
-                        <label className="block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">
-                          Günlük AI Limiti
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          value={state.dailyAiLimit}
-                          onChange={(e) => handleFieldChange(pkg.id, 'dailyAiLimit', e.target.value)}
-                          onBlur={() => handleBlurSave(pkg)}
-                          className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-all"
-                          placeholder="50"
-                        />
-                        <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                          Günde maks. {formatTR(currentLimit)} AI sorgusu
-                        </p>
-                      </div>
-
-                      <div>
-                        <label className="block text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-1.5">
-                          Fiyat (₺/ay)
-                        </label>
-                        <div className="relative">
-                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-[var(--color-text-secondary)] font-medium">₺</span>
-                          <input
-                            type="number"
-                            min={0}
-                            step={0.01}
-                            value={state.price}
-                            onChange={(e) => handleFieldChange(pkg.id, 'price', e.target.value)}
-                            onBlur={() => handleBlurSave(pkg)}
-                            className="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-background)] pl-7 pr-3 py-2 text-sm text-[var(--color-text-primary)] focus:outline-none focus:ring-2 focus:ring-[var(--color-primary)] focus:border-transparent transition-all"
-                            placeholder="0.00"
-                          />
-                        </div>
-                      </div>
-
-                      {/* Revenue estimate */}
-                      <div
-                        className="rounded-lg p-3 flex items-center justify-between"
-                        style={{ backgroundColor: 'color-mix(in srgb, var(--color-surface) 80%, transparent)' }}
-                      >
-                        <div className="flex items-center gap-1.5">
-                          <TrendingUp size={13} style={{ color: config.accentColor }} />
-                          <span className="text-xs text-[var(--color-text-secondary)]">Tahmini Gelir</span>
-                        </div>
-                        <span className="text-sm font-bold" style={{ color: config.accentColor }}>
-                          ₺{formatTR(revenue, 2)}
-                        </span>
-                      </div>
-                    </div>
-
-                    {/* Save button */}
-                    <div className="px-5 pb-5">
-                      <Button
-                        variant={isDirty ? 'primary' : 'secondary'}
-                        size="sm"
-                        className="w-full"
-                        onClick={() => handleSave(pkg)}
-                        loading={isSaving}
-                        disabled={isSaving}
-                      >
-                        <Save size={13} />
-                        {isSaving ? 'Kaydediliyor…' : isDirty ? 'Değişiklikleri Kaydet' : 'Kaydet'}
-                      </Button>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-
-            {/* Comparison table */}
-            <div className="bg-[var(--color-surface-elevated)] rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
-                <Layers size={17} className="text-[var(--color-text-secondary)]" />
-                <h3 className="text-base font-semibold text-[var(--color-text-primary)]">Paket Karşılaştırma</h3>
-              </div>
-              <div className="overflow-x-auto">
-                <table className="w-full border-collapse">
-                  <thead>
-                    <tr className="border-b border-[var(--color-border)]">
-                      <th className="text-left px-6 py-3 text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider w-40">
-                        Özellik
-                      </th>
-                      {packages.map((pkg) => {
-                        const config = getConfig(pkg.name)
-                        return (
-                          <th
-                            key={pkg.id}
-                            className="text-center px-6 py-3 text-xs font-semibold uppercase tracking-wider"
-                            style={{ color: config.accentColor }}
-                          >
-                            {pkg.name}
-                          </th>
-                        )
-                      })}
-                    </tr>
-                  </thead>
-                  <tbody>
-                    <tr className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] transition-colors">
-                      <td className="px-6 py-3 text-sm text-[var(--color-text-secondary)]">Günlük AI Limiti</td>
-                      {packages.map((pkg) => (
-                        <td key={pkg.id} className="px-6 py-3 text-center">
-                          <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-                            {formatTR(parseInt(editStates[pkg.id]?.dailyAiLimit ?? String(pkg.dailyAiLimit), 10) || 0)} sorgu
-                          </span>
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] transition-colors">
-                      <td className="px-6 py-3 text-sm text-[var(--color-text-secondary)]">Aylık Fiyat</td>
-                      {packages.map((pkg) => (
-                        <td key={pkg.id} className="px-6 py-3 text-center">
-                          <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-                            ₺{formatTR(parseFloat(editStates[pkg.id]?.price ?? String(pkg.price)) || 0, 2)}
-                          </span>
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="border-b border-[var(--color-border)] hover:bg-[var(--color-surface)] transition-colors">
-                      <td className="px-6 py-3 text-sm text-[var(--color-text-secondary)]">Toplam Kullanıcı</td>
-                      {packages.map((pkg) => (
-                        <td key={pkg.id} className="px-6 py-3 text-center">
-                          <span className="text-sm font-semibold text-[var(--color-text-primary)]">
-                            {formatTR(pkg._count.users)}
-                          </span>
-                        </td>
-                      ))}
-                    </tr>
-                    <tr className="hover:bg-[var(--color-surface)] transition-colors">
-                      <td className="px-6 py-3 text-sm text-[var(--color-text-secondary)]">Tahmini Gelir</td>
-                      {packages.map((pkg) => {
-                        const config = getConfig(pkg.name)
-                        const currentPrice = parseFloat(editStates[pkg.id]?.price ?? String(pkg.price)) || 0
-                        const revenue = currentPrice * pkg._count.users
-                        return (
-                          <td key={pkg.id} className="px-6 py-3 text-center">
-                            <span className="text-sm font-bold" style={{ color: config.accentColor }}>
-                              ₺{formatTR(revenue, 2)}
-                            </span>
-                          </td>
-                        )
-                      })}
-                    </tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-
-            {/* Total revenue card */}
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+        {policies.map((policy) => {
+          const state = form[policy.tier];
+          return (
             <div
-              className="bg-[var(--color-surface-elevated)] rounded-xl p-6"
-              style={{ borderLeft: '4px solid var(--color-success)' }}
+              key={policy.tier}
+              className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-surface)] p-5 space-y-4"
             >
-              <div className="flex items-center justify-between flex-wrap gap-4">
-                <div className="flex items-center gap-3">
-                  <div
-                    className="w-12 h-12 rounded-xl flex items-center justify-center"
-                    style={{ backgroundColor: 'color-mix(in srgb, var(--color-success) 15%, transparent)' }}
-                  >
-                    <DollarSign size={22} style={{ color: 'var(--color-success)' }} />
-                  </div>
-                  <div>
-                    <p className="text-xs font-semibold text-[var(--color-text-secondary)] uppercase tracking-wider mb-0.5">
-                      Toplam Gelir Hesabı
-                    </p>
-                    <p className="text-sm text-[var(--color-text-secondary)]">
-                      Tüm paketlerin kullanıcı sayısına göre tahmini aylık gelir
-                    </p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-4xl font-bold" style={{ color: 'var(--color-success)' }}>
-                    ₺{formatTR(totalRevenue, 2)}
-                  </p>
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg font-semibold text-[var(--color-text-primary)]">
+                    {policy.displayName}
+                  </h2>
                   <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                    {formatTR(packages.reduce((s, p) => s + p._count.users, 0))} toplam kullanıcı
+                    Tier: {policy.tier}
                   </p>
                 </div>
+                <Badge variant={policy.hasExamAccess ? "success" : "secondary"}>
+                  {policy.hasExamAccess ? "Sınav Açık" : "Sınav Kapalı"}
+                </Badge>
               </div>
 
-              {/* Per-package breakdown */}
-              <div className="mt-5 pt-5 border-t border-[var(--color-border)] grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {packages.map((pkg) => {
-                  const config = getConfig(pkg.name)
-                  const currentPrice = parseFloat(editStates[pkg.id]?.price ?? String(pkg.price)) || 0
-                  const revenue = currentPrice * pkg._count.users
-                  const percentage = totalRevenue > 0 ? (revenue / totalRevenue) * 100 : 0
-                  return (
-                    <div key={pkg.id}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-xs font-medium text-[var(--color-text-secondary)]">{pkg.name}</span>
-                        <span className="text-xs font-bold" style={{ color: config.accentColor }}>
-                          ₺{formatTR(revenue, 0)}
-                        </span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-[var(--color-border)] overflow-hidden">
-                        <div
-                          className="h-full rounded-full transition-all duration-500"
-                          style={{ width: `${percentage}%`, backgroundColor: config.accentColor }}
-                        />
-                      </div>
-                      <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                        %{formatTR(percentage, 1)} pay
-                      </p>
+              <div className="grid grid-cols-2 gap-3">
+                <label className="text-sm">
+                  <span className="block text-[var(--color-text-secondary)] mb-1">Aylık Fiyat</span>
+                  <input
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2"
+                    value={state.monthlyPrice}
+                    onChange={(e) => update(policy.tier, "monthlyPrice", e.target.value)}
+                  />
+                </label>
+                <label className="text-sm">
+                  <span className="block text-[var(--color-text-secondary)] mb-1">Token Grant</span>
+                  <input
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2"
+                    value={state.initialTokenGrant}
+                    onChange={(e) => update(policy.tier, "initialTokenGrant", e.target.value)}
+                  />
+                </label>
+                <label className="text-sm col-span-2">
+                  <span className="block text-[var(--color-text-secondary)] mb-1">
+                    Aylık Soru Bankası Limiti
+                  </span>
+                  <input
+                    placeholder="Sınırsız için boş bırak"
+                    className="w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-background)] px-3 py-2"
+                    value={state.questionBankMonthlyLimit}
+                    onChange={(e) =>
+                      update(policy.tier, "questionBankMonthlyLimit", e.target.value)
+                    }
+                  />
+                </label>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {[
+                  {
+                    key: "hasExamAccess" as const,
+                    label: "Sınav modülleri",
+                  },
+                  {
+                    key: "hasUnlimitedQuestionBank" as const,
+                    label: "Soru bankası sınırsız",
+                  },
+                  {
+                    key: "canBuyAddons" as const,
+                    label: "Addon satın alabilir",
+                  },
+                ].map((item) => (
+                  <button
+                    key={item.key}
+                    type="button"
+                    onClick={() => update(policy.tier, item.key, !state[item.key])}
+                    className={`rounded-xl border px-3 py-3 text-left ${
+                      state[item.key]
+                        ? "border-emerald-500/40 bg-emerald-500/10"
+                        : "border-[var(--color-border)] bg-[var(--color-background)]"
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 text-sm font-medium text-[var(--color-text-primary)]">
+                      <ShieldCheck size={14} />
+                      {item.label}
                     </div>
-                  )
-                })}
+                    <p className="text-xs text-[var(--color-text-secondary)] mt-1">
+                      {state[item.key] ? "Aktif" : "Pasif"}
+                    </p>
+                  </button>
+                ))}
               </div>
             </div>
-          </>
-        )}
+          );
+        })}
+      </div>
     </div>
-  )
+  );
 }

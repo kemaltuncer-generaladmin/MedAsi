@@ -42,7 +42,7 @@ export default function ChatInput({
       />
 
       <div
-        className="rounded-[22px] p-2 transition-all medasi-input-shell"
+        className="rounded-2xl p-2 transition-all medasi-input-shell"
         style={{
           background:
             "linear-gradient(180deg, color-mix(in srgb, var(--color-surface-elevated) 88%, transparent), color-mix(in srgb, var(--color-surface) 78%, transparent))",
