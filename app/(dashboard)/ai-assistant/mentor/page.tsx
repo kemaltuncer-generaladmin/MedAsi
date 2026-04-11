@@ -141,43 +141,43 @@ export default function MentorPage() {
           background: "linear-gradient(135deg, #7c3aed 0%, var(--color-primary) 60%, #06b6d4 100%)",
         }}
       >
-        <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-white/5 -translate-y-10 translate-x-10" />
-        <div className="absolute bottom-0 left-20 w-24 h-24 rounded-full bg-white/5 translate-y-8" />
+        <div className="absolute top-0 right-0 w-40 h-40 rounded-full bg-[var(--color-surface-elevated)] -translate-y-10 translate-x-10" />
+        <div className="absolute bottom-0 left-20 w-24 h-24 rounded-full bg-[var(--color-surface-elevated)] translate-y-8" />
 
         <div className="relative z-10 flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <Brain size={28} className="text-white" />
+            <div className="w-14 h-14 rounded-2xl bg-[var(--color-surface-elevated)] backdrop-blur-sm flex items-center justify-center">
+              <Brain size={28} className="text-[var(--color-text-primary)]" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">Mentor AI</h1>
-              <p className="text-white/70 text-sm">Kişisel hoca, rehber ve motivasyon ortağın</p>
+              <h1 className="text-xl font-bold text-[var(--color-text-primary)]">Mentor AI</h1>
+              <p className="text-[var(--color-text-primary)]/70 text-sm">Kişisel hoca, rehber ve motivasyon ortağın</p>
             </div>
           </div>
 
           <div className="flex items-center gap-3">
             {motivationScore != null && (
-              <div className="flex flex-col items-end gap-1 bg-white/10 rounded-2xl px-4 py-2">
+              <div className="flex flex-col items-end gap-1 bg-[var(--color-surface-elevated)] rounded-2xl px-4 py-2">
                 <div className="flex items-center gap-2">
-                  <Flame size={14} className="text-orange-300" />
-                  <span className="text-white text-sm font-bold">{motivationScore}/100</span>
+                  <Flame size={14} className="text-[var(--color-warning)]" />
+                  <span className="text-[var(--color-text-primary)] text-sm font-bold">{motivationScore}/100</span>
                 </div>
-                <div className="w-24 h-1.5 rounded-full bg-white/20 overflow-hidden">
+                <div className="w-24 h-1.5 rounded-full bg-[var(--color-surface-elevated)] overflow-hidden">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-orange-400 to-red-400 transition-all duration-1000"
                     style={{ width: `${motivationScore}%` }}
                   />
                 </div>
-                <span className="text-white/50 text-[10px]">motivasyon</span>
+                <span className="text-[var(--color-text-primary)]/50 text-[10px]">motivasyon</span>
               </div>
             )}
 
             <button
               onClick={reset}
-              className="p-2.5 rounded-xl bg-white/10 hover:bg-white/20 transition-colors"
+              className="p-2.5 rounded-xl bg-[var(--color-surface-elevated)] hover:bg-[var(--color-surface-elevated)] transition-colors"
               title="Yeni sohbet"
             >
-              <RefreshCw size={16} className="text-white" />
+              <RefreshCw size={16} className="text-[var(--color-text-primary)]" />
             </button>
           </div>
         </div>
@@ -190,9 +190,9 @@ export default function MentorPage() {
             { icon: TrendingUp, label: "İlerleme Takibi" },
             { icon: Star, label: "Kişiselleştirilmiş" },
           ].map(f => (
-            <div key={f.label} className="flex items-center gap-1.5 bg-white/10 rounded-full px-3 py-1">
-              <f.icon size={11} className="text-white/80" />
-              <span className="text-[11px] text-white/80 font-medium">{f.label}</span>
+            <div key={f.label} className="flex items-center gap-1.5 bg-[var(--color-surface-elevated)] rounded-full px-3 py-1">
+              <f.icon size={11} className="text-[var(--color-text-primary)]/80" />
+              <span className="text-[11px] text-[var(--color-text-primary)]/80 font-medium">{f.label}</span>
             </div>
           ))}
         </div>
@@ -213,12 +213,12 @@ export default function MentorPage() {
               className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 mt-1 ${
                 msg.role === "user"
                   ? "bg-[var(--color-primary)]/20"
-                  : "bg-purple-500/20"
+                  : "bg-[var(--color-primary)]/20"
               }`}
             >
               {msg.role === "user"
                 ? <User size={14} className="text-[var(--color-primary)]" />
-                : <Brain size={14} className="text-purple-400" />
+                : <Brain size={14} className="text-[var(--color-primary)]" />
               }
             </div>
 
@@ -226,7 +226,7 @@ export default function MentorPage() {
             <div
               className={`max-w-[75%] rounded-2xl px-4 py-3 text-sm leading-relaxed ${
                 msg.role === "user"
-                  ? "rounded-tr-sm text-white"
+                  ? "rounded-tr-sm text-[var(--color-text-primary)]"
                   : "rounded-tl-sm"
               }`}
               style={msg.role === "user"
@@ -240,8 +240,8 @@ export default function MentorPage() {
 
         {loading && (
           <div className="flex gap-3">
-            <div className="w-8 h-8 rounded-xl bg-purple-500/20 flex items-center justify-center shrink-0 mt-1">
-              <Brain size={14} className="text-purple-400" />
+            <div className="w-8 h-8 rounded-xl bg-[var(--color-primary)]/20 flex items-center justify-center shrink-0 mt-1">
+              <Brain size={14} className="text-[var(--color-primary)]" />
             </div>
             <div
               className="rounded-2xl rounded-tl-sm px-4 py-3"
@@ -306,8 +306,8 @@ export default function MentorPage() {
             style={{ background: "linear-gradient(135deg, var(--color-primary), #8b5cf6)" }}
           >
             {loading
-              ? <Loader2 size={16} className="animate-spin text-white" />
-              : <Send size={16} className="text-white" />}
+              ? <Loader2 size={16} className="animate-spin text-[var(--color-text-primary)]" />
+              : <Send size={16} className="text-[var(--color-text-primary)]" />}
           </button>
         </div>
         <p className="text-center text-[10px] text-[var(--color-text-secondary)] mt-2">

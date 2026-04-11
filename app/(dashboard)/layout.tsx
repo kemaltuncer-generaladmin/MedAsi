@@ -99,6 +99,7 @@ export default async function DashboardLayout({
           packageName={packageName}
           moduleToggles={publicConfig.moduleToggles}
           role={role}
+          userName={userName}
         />
       }
       banner={

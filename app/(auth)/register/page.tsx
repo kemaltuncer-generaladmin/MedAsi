@@ -103,7 +103,7 @@ export default function RegisterPage() {
   return (
     <Card
       variant="bordered"
-      className="border-[#1E1E2E] bg-[#0F0F14] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
+      className="border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
     >
       <div className="mb-8 space-y-3">
         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--color-primary)] [font-family:var(--font-mono)]">
@@ -154,7 +154,7 @@ export default function RegisterPage() {
               required
               autoComplete="name"
               aria-required="true"
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -180,7 +180,7 @@ export default function RegisterPage() {
               autoComplete="email"
               inputMode="email"
               aria-required="true"
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -207,7 +207,7 @@ export default function RegisterPage() {
               aria-required="true"
               value={password}
               onChange={(event) => setPassword(event.target.value)}
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
             />
             <button
               type="button"
@@ -243,7 +243,7 @@ export default function RegisterPage() {
               value={confirmPassword}
               onChange={(event) => setConfirmPassword(event.target.value)}
               error={!passwordsMatch ? "Şifreler eşleşmiyor" : undefined}
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
             />
             <button
               type="button"
@@ -273,12 +273,12 @@ export default function RegisterPage() {
               name="selectedPackage"
               required
               defaultValue=""
-              className="h-11 w-full appearance-none rounded-[4px] border border-[#1E1E2E] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
+              className="h-11 w-full appearance-none rounded-[4px] border border-[var(--color-border)] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
             >
               <option
                 value=""
                 disabled
-                className="bg-[#070709] text-[var(--color-text-secondary)]"
+                className="bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
               >
                 Paket seçin
               </option>
@@ -286,7 +286,7 @@ export default function RegisterPage() {
                 <option
                   key={option}
                   value={option}
-                  className="bg-[#070709] text-[var(--color-text-primary)]"
+                  className="bg-[var(--color-surface)] text-[var(--color-text-primary)]"
                 >
                   {packageLabels[option]}
                 </option>
@@ -321,7 +321,7 @@ export default function RegisterPage() {
               value={couponCode}
               onChange={(e) => handleCouponChange(e.target.value)}
               autoComplete="off"
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 pr-10 uppercase tracking-widest focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-10 uppercase tracking-widest focus:ring-[var(--color-primary)]"
               style={{
                 borderColor:
                   couponState?.valid === true
@@ -388,12 +388,12 @@ export default function RegisterPage() {
               name="seniority"
               required
               defaultValue=""
-              className="h-11 w-full appearance-none rounded-[4px] border border-[#1E1E2E] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
+              className="h-11 w-full appearance-none rounded-[4px] border border-[var(--color-border)] bg-[var(--color-background)] px-3 pr-11 text-sm text-[var(--color-text-primary)] outline-none transition-all focus:border-transparent focus:ring-2 focus:ring-[var(--color-primary)]"
             >
               <option
                 value=""
                 disabled
-                className="bg-[#070709] text-[var(--color-text-secondary)]"
+                className="bg-[var(--color-surface)] text-[var(--color-text-secondary)]"
               >
                 Bir aşama seçin
               </option>
@@ -401,7 +401,7 @@ export default function RegisterPage() {
                 <option
                   key={option}
                   value={option}
-                  className="bg-[#070709] text-[var(--color-text-primary)]"
+                  className="bg-[var(--color-surface)] text-[var(--color-text-primary)]"
                 >
                   {option}
                 </option>
@@ -421,7 +421,7 @@ export default function RegisterPage() {
             required
             checked={legalAccepted}
             onChange={(e) => setLegalAccepted(e.target.checked)}
-            className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[#1E1E2E] bg-[var(--color-background)] accent-[var(--color-primary)]"
+            className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-background)] accent-[var(--color-primary)]"
           />
           <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
             <input type="hidden" name="privacyAccepted" value={legalAccepted ? "true" : "false"} />
@@ -443,7 +443,7 @@ export default function RegisterPage() {
             required
             checked={medicalDataConsentAccepted}
             onChange={(e) => setMedicalDataConsentAccepted(e.target.checked)}
-            className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[#1E1E2E] bg-[var(--color-background)] accent-[var(--color-primary)]"
+            className="w-4 h-4 mt-0.5 shrink-0 rounded border border-[var(--color-border)] bg-[var(--color-background)] accent-[var(--color-primary)]"
           />
           <span className="text-xs text-[var(--color-text-secondary)] leading-relaxed">
             Hasta/sağlık verisi gibi özel nitelikli verileri yalnızca yetkili kullanım amacıyla işleyeceğimi, platformun eğitim amaçlı olduğunu ve klinik karar sorumluluğunun kullanıcıda olduğunu kabul ediyorum.

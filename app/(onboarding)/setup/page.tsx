@@ -506,7 +506,7 @@ export default function SetupPage() {
                     />
                   </div>
 
-                  {error && <p className="text-sm text-red-400">{error}</p>}
+                  {error && <p className="text-sm text-[var(--color-destructive)]">{error}</p>}
 
                   <button
                     onClick={handleFinish}
@@ -535,7 +535,7 @@ export default function SetupPage() {
 
         {/* Error (steps 2-3) */}
         {error && step !== 4 && (
-          <p className="text-center text-sm text-red-400 mt-3">{error}</p>
+          <p className="text-center text-sm text-[var(--color-destructive)] mt-3">{error}</p>
         )}
 
         {/* Navigation (steps 2-3) */}

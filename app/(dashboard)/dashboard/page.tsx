@@ -59,10 +59,10 @@ function weatherLabel(code: number): string {
 }
 
 function greetingByHour(h: number) {
-  if (h < 6) return { text: "İyi geceler", icon: <Moon size={22} className="text-indigo-400" /> };
+  if (h < 6) return { text: "İyi geceler", icon: <Moon size={22} className="text-[var(--color-primary)]" /> };
   if (h < 12) return { text: "Günaydın", icon: <Sun size={22} className="text-yellow-400" /> };
-  if (h < 18) return { text: "İyi günler", icon: <Coffee size={22} className="text-amber-500" /> };
-  return { text: "İyi akşamlar", icon: <Moon size={22} className="text-indigo-400" /> };
+  if (h < 18) return { text: "İyi günler", icon: <Coffee size={22} className="text-[var(--color-warning)]" /> };
+  return { text: "İyi akşamlar", icon: <Moon size={22} className="text-[var(--color-primary)]" /> };
 }
 
 const DEFAULT_GOALS: DailyGoal[] = [
@@ -330,7 +330,7 @@ export default function DashboardPage() {
                 event.stopPropagation();
                 removeGoal(goal.id);
               }}
-              className="px-2 py-1 rounded-md text-xs text-[var(--color-text-secondary)] hover:text-red-400 hover:bg-red-500/10 transition-colors"
+              className="px-2 py-1 rounded-md text-xs text-[var(--color-text-secondary)] hover:text-[var(--color-destructive)] hover:bg-[color-mix(in_srgb,var(--color-destructive)_10%,transparent)] transition-colors"
             >
               Sil
             </button>
@@ -567,39 +567,39 @@ export default function DashboardPage() {
           }}
         >
           {/* Dekoratif daireler */}
-          <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10 bg-white -translate-y-16 translate-x-16" />
-          <div className="absolute bottom-0 left-1/3 w-32 h-32 rounded-full opacity-10 bg-white translate-y-8" />
+          <div className="absolute top-0 right-0 w-64 h-64 rounded-full opacity-10 bg-[var(--color-text-primary)] -translate-y-16 translate-x-16" />
+          <div className="absolute bottom-0 left-1/3 w-32 h-32 rounded-full opacity-10 bg-[var(--color-text-primary)] translate-y-8" />
 
           <div className="relative z-10 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <div className="w-14 h-14 rounded-2xl bg-white/20 flex items-center justify-center backdrop-blur-sm shrink-0">
+              <div className="w-14 h-14 rounded-2xl bg-[var(--color-surface-elevated)] flex items-center justify-center backdrop-blur-sm shrink-0">
                 {greeting.icon}
               </div>
               <div>
-                <h1 className="text-2xl sm:text-3xl font-bold text-white">{greeting.text} 👋</h1>
-                <p className="text-white/70 text-sm mt-0.5">Ana Panelin — tüm sistemin burada</p>
+                <h1 className="text-2xl sm:text-3xl font-bold text-[var(--color-text-primary)]">{greeting.text} 👋</h1>
+                <p className="text-[var(--color-text-primary)]/70 text-sm mt-0.5">Ana Panelin — tüm sistemin burada</p>
               </div>
             </div>
 
             {/* Sağ: Saat + Hava + Çalışma Modu */}
             <div className="flex items-center gap-3 flex-wrap">
               {/* Saat */}
-              <div className="flex flex-col items-end bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2">
-                <span className="text-xl font-mono font-bold text-white tabular-nums">
+              <div className="flex flex-col items-end bg-[var(--color-surface-elevated)] backdrop-blur-sm rounded-2xl px-4 py-2">
+                <span className="text-xl font-mono font-bold text-[var(--color-text-primary)] tabular-nums">
                   {now.toLocaleTimeString("tr-TR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
                 </span>
-                <span className="text-white/60 text-xs">
+                <span className="text-[var(--color-text-primary)]/60 text-xs">
                   {now.toLocaleDateString("tr-TR", { weekday: "long", day: "numeric", month: "long" })}
                 </span>
               </div>
 
               {/* Hava */}
               {weather && (
-                <div className="flex items-center gap-2 bg-white/10 backdrop-blur-sm rounded-2xl px-4 py-2">
+                <div className="flex items-center gap-2 bg-[var(--color-surface-elevated)] backdrop-blur-sm rounded-2xl px-4 py-2">
                   {weatherIcon(weather.weathercode)}
                   <div>
-                    <p className="text-white font-bold text-sm">{weather.temp}°C</p>
-                    <p className="text-white/60 text-xs flex items-center gap-1">
+                    <p className="text-[var(--color-text-primary)] font-bold text-sm">{weather.temp}°C</p>
+                    <p className="text-[var(--color-text-primary)]/60 text-xs flex items-center gap-1">
                       <MapPin size={10} />{weather.city}
                     </p>
                   </div>
@@ -610,7 +610,7 @@ export default function DashboardPage() {
               <Button
                 onClick={studyMode ? () => setStudyMode(true) : startStudyMode}
                 disabled={studyLoading}
-                className="bg-white/20 hover:bg-white/30 text-white border-white/30 border backdrop-blur-sm"
+                className="bg-[var(--color-surface-elevated)] hover:bg-[var(--color-surface)] text-[var(--color-text-primary)] border-[var(--color-border)] border backdrop-blur-sm"
                 variant="ghost"
               >
                 {studyLoading
@@ -687,7 +687,7 @@ export default function DashboardPage() {
 
                 {stats?.motivationScore != null && (
                   <div className="mt-4 flex items-center gap-3">
-                    <Flame size={14} className="text-orange-400" />
+                    <Flame size={14} className="text-[var(--color-warning)]" />
                     <div className="flex-1 h-1.5 rounded-full bg-[var(--color-surface)] overflow-hidden">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-orange-400 to-red-500 transition-all duration-1000"

@@ -37,6 +37,7 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { Toggle } from "@/components/ui/Toggle";
+import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 
 type RoleOption = {
   value: string;
@@ -335,21 +336,11 @@ function SettingsSkeleton() {
   return (
     <div className="max-w-3xl mx-auto space-y-6 pb-8">
       <div className="space-y-2">
-        <div className="h-8 w-44 rounded-lg bg-[var(--color-surface-elevated)] animate-pulse" />
-        <div className="h-4 w-72 rounded-lg bg-[var(--color-surface-elevated)] animate-pulse" />
+        <Skeleton className="h-8 w-44 rounded-lg" />
+        <Skeleton className="h-4 w-72 rounded-lg" />
       </div>
       {[0, 1, 2].map((item) => (
-        <div
-          key={item}
-          className="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-6 animate-pulse"
-        >
-          <div className="h-5 w-48 rounded bg-[var(--color-surface-elevated)] mb-4" />
-          <div className="space-y-4">
-            <div className="h-12 rounded bg-[var(--color-surface-elevated)]" />
-            <div className="h-12 rounded bg-[var(--color-surface-elevated)]" />
-            <div className="h-12 rounded bg-[var(--color-surface-elevated)]" />
-          </div>
-        </div>
+        <SkeletonCard key={item} />
       ))}
     </div>
   );

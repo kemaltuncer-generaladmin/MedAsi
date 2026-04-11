@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
-import { Navbar, HeroSection, MarqueeBand } from "@/components/landing/HeroSection";
+import { Navbar } from "@/components/landing/Navbar";
+import { HeroSection, MarqueeBand } from "@/components/landing/HeroSection";
 
 function LandingSectionSkeleton({
   heightClass = "min-h-[420px]",

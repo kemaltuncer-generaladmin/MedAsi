@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { Dialog } from "@/components/ui/Dialog";
 import { StickyNote, Plus, Search, Trash2, Edit2, Save, X } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -329,37 +330,15 @@ export default function NotesPage() {
         </div>
       </div>
 
-      {confirmDelete && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-[var(--color-surface-elevated)] rounded-xl p-6 w-full max-w-sm border border-[var(--color-border)]">
-            <h2 className="text-lg font-bold text-[var(--color-text-primary)] mb-2">
-              Notu Sil
-            </h2>
-            <p className="text-[var(--color-text-secondary)] text-sm mb-6">
-              <span className="text-[var(--color-text-primary)] font-medium">
-                &ldquo;{confirmDelete.title}&rdquo;
-              </span>{" "}
-              notunu silmek istediğinizden emin misiniz?
-            </p>
-            <div className="flex gap-3">
-              <Button
-                variant="ghost"
-                onClick={() => setConfirmDelete(null)}
-                className="flex-1"
-              >
-                İptal
-              </Button>
-              <Button
-                variant="destructive"
-                onClick={() => deleteNote(confirmDelete)}
-                className="flex-1"
-              >
-                Sil
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
+      <Dialog
+        open={!!confirmDelete}
+        onClose={() => setConfirmDelete(null)}
+        title="Notu Sil"
+        description={`"${confirmDelete?.title}" notunu silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}
+        variant="destructive"
+        confirmLabel="Sil"
+        onConfirm={() => confirmDelete && deleteNote(confirmDelete)}
+      />
     </div>
   );
 }

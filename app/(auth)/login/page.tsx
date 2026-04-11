@@ -21,14 +21,14 @@ function LoginPageSkeleton() {
   return (
     <Card
       variant="bordered"
-      className="border-[#1E1E2E] bg-[#0F0F14] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
+      className="border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
     >
       <div className="space-y-4">
-        <div className="h-8 w-40 rounded bg-white/5" />
-        <div className="h-4 w-56 rounded bg-white/5" />
-        <div className="h-10 rounded bg-white/5" />
-        <div className="h-10 rounded bg-white/5" />
-        <div className="h-11 rounded bg-white/5" />
+        <div className="h-8 w-40 rounded bg-[var(--color-surface-elevated)]" />
+        <div className="h-4 w-56 rounded bg-[var(--color-surface-elevated)]" />
+        <div className="h-10 rounded bg-[var(--color-surface-elevated)]" />
+        <div className="h-10 rounded bg-[var(--color-surface-elevated)]" />
+        <div className="h-11 rounded bg-[var(--color-surface-elevated)]" />
       </div>
     </Card>
   );
@@ -79,7 +79,7 @@ function LoginPageContent() {
   return (
     <Card
       variant="bordered"
-      className="border-[#1E1E2E] bg-[#0F0F14] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
+      className="border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-7 shadow-[0_0_0_1px_rgba(0,0,0,0.08)] sm:p-8"
     >
       <div className="mb-8 space-y-3">
         <p className="text-[10px] uppercase tracking-[0.24em] text-[var(--color-primary)] [font-family:var(--font-mono)]">
@@ -199,7 +199,7 @@ function LoginPageContent() {
               inputMode="email"
               aria-required="true"
               aria-describedby={error ? "login-error" : undefined}
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 focus:ring-[var(--color-primary)]"
             />
           </div>
         </div>
@@ -225,7 +225,7 @@ function LoginPageContent() {
               required
               autoComplete="current-password"
               aria-required="true"
-              className="h-11 rounded-[4px] border-[#1E1E2E] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
+              className="h-11 rounded-[4px] border-[var(--color-border)] bg-[var(--color-background)] pl-10 pr-11 focus:ring-[var(--color-primary)]"
             />
             <button
               type="button"
@@ -243,7 +243,7 @@ function LoginPageContent() {
             <input
               type="checkbox"
               name="rememberMe"
-              className="w-4 h-4 rounded border border-[#1E1E2E] bg-[var(--color-background)] accent-[var(--color-primary)]"
+              className="w-4 h-4 rounded border border-[var(--color-border)] bg-[var(--color-background)] accent-[var(--color-primary)]"
             />
             <span className="text-xs text-[var(--color-text-secondary)]">Beni hatırla</span>
           </label>

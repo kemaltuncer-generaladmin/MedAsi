@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import {
   Users,
   UserPlus,
@@ -12,6 +12,7 @@ import {
   Filter,
 } from "lucide-react";
 import { Button, Card, Input } from "@/components/ui";
+import { Dialog } from "@/components/ui/Dialog";
 import { toast } from "react-hot-toast";
 import {
   PatientCard,
@@ -53,6 +54,8 @@ export default function ClinicPage() {
     "all" | "active" | "discharged"
   >("all");
   const [refreshKey, setRefreshKey] = useState(0);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
 
   useEffect(() => {
     const loadPatients = async () => {
@@ -82,24 +85,31 @@ export default function ClinicPage() {
     });
   }, [patients, search, statusFilter]);
 
-  const deletePatient = async (id: string) => {
-    const ok = window.confirm("Hastayı silmek istediğine emin misin?");
-    if (!ok) return;
+  const deletePatient = (id: string) => {
+    setDeleteTarget(id);
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeletePatient = useCallback(async () => {
+    if (!deleteTarget) return;
     try {
-      const res = await fetch(`/api/clinic/patients?id=${id}`, {
+      const res = await fetch(`/api/clinic/patients?id=${deleteTarget}`, {
         method: "DELETE",
       });
       if (!res.ok) {
         toast.error("Silme başarısız");
         return;
       }
-      if (selectedPatientId === id) setSelectedPatientId("");
+      if (selectedPatientId === deleteTarget) setSelectedPatientId("");
       setRefreshKey((x) => x + 1);
       toast.success("Hasta silindi");
     } catch {
       toast.error("Bağlantı hatası");
+    } finally {
+      setDeleteDialogOpen(false);
+      setDeleteTarget(null);
     }
-  };
+  }, [deleteTarget, selectedPatientId]);
 
   const printPatient = (patient: Patient) => {
     const doc = `
@@ -311,6 +321,16 @@ export default function ClinicPage() {
           </Card>
         )
       ) : null}
+
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        title="Silme Onayı"
+        description="Hastayı silmek istediğine emin misin? Bu işlem geri alınamaz."
+        variant="destructive"
+        confirmLabel="Sil"
+        onConfirm={confirmDeletePatient}
+      />
     </div>
   );
 }

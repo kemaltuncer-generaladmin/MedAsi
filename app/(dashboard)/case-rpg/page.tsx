@@ -556,7 +556,7 @@ SADECE aşağıdaki JSON formatında yanıt ver:
                   let borderColor = "var(--color-border)";
                   let bgColor = "transparent";
                   let textColor = "var(--color-text-secondary)";
-                  let hoverClass = "hover:border-[var(--color-primary)] hover:text-white";
+                  let hoverClass = "hover:border-[var(--color-primary)] hover:text-[var(--color-text-primary)]";
 
                   if (showFeedback) {
                     hoverClass = "";

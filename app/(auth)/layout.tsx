@@ -40,7 +40,7 @@ export default function AuthLayout({ children }: { children: ReactNode }) {
               {stats.map((stat) => (
                 <div
                   key={stat.label}
-                  className="border border-[var(--color-border)] bg-[#0F0F14]/70 p-4 backdrop-blur-sm"
+                  className="border border-[var(--color-border)] bg-[var(--color-surface-elevated)] p-4 backdrop-blur-sm"
                 >
                   <div className="text-2xl text-[var(--color-primary)] [font-family:var(--font-mono)]">
                     {stat.value}
