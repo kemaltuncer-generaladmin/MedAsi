@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 
-type GuardKey = "materials" | "addons" | "support" | "usage" | "study-core";
+type GuardKey = "materials" | "addons" | "support" | "usage" | "study-core" | "osce";
 
 const guardState = globalThis as typeof globalThis & {
   __medasiSchemaGuardPromises__?: Partial<Record<GuardKey, Promise<void>>>;
@@ -429,6 +429,72 @@ export async function ensureUsageTrackingSchema(): Promise<void> {
         ON public.module_activities(module, created_at DESC)`,
       `CREATE INDEX IF NOT EXISTS module_activities_action_created_at_idx
         ON public.module_activities(action, created_at DESC)`,
+    ]);
+  });
+}
+
+export async function ensureOsceSchema(): Promise<void> {
+  return oncePerProcess("osce", async () => {
+    await ensureMaterialsSchema();
+    await runRawStatements([
+      `CREATE EXTENSION IF NOT EXISTS pgcrypto`,
+      `CREATE TABLE IF NOT EXISTS public.osce_scenarios (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        status text NOT NULL DEFAULT 'pending',
+        specialty text NOT NULL,
+        difficulty text NOT NULL,
+        case_payload jsonb NOT NULL,
+        anonymized_fields jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_by text REFERENCES public.users(id) ON DELETE SET NULL,
+        approved_by text REFERENCES public.users(id) ON DELETE SET NULL,
+        approved_at timestamptz,
+        rejection_reason text,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        updated_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_osce_scenarios_status_created
+        ON public.osce_scenarios (status, created_at DESC)`,
+      `CREATE INDEX IF NOT EXISTS idx_osce_scenarios_specialty_difficulty
+        ON public.osce_scenarios (specialty, difficulty)`,
+      `CREATE TABLE IF NOT EXISTS public.osce_scenario_material_links (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        scenario_id text NOT NULL REFERENCES public.osce_scenarios(id) ON DELETE CASCADE,
+        material_id text NOT NULL REFERENCES public.user_materials(id) ON DELETE CASCADE,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        UNIQUE(scenario_id, material_id)
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_osce_links_material
+        ON public.osce_scenario_material_links (material_id, created_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.osce_sessions (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        scenario_id text REFERENCES public.osce_scenarios(id) ON DELETE SET NULL,
+        case_id text,
+        specialty text,
+        difficulty text,
+        quick_summary jsonb NOT NULL DEFAULT '{}'::jsonb,
+        deep_report text,
+        scores jsonb NOT NULL DEFAULT '{}'::jsonb,
+        durations jsonb NOT NULL DEFAULT '{}'::jsonb,
+        model text,
+        token_usage jsonb NOT NULL DEFAULT '{}'::jsonb,
+        created_at timestamptz NOT NULL DEFAULT now(),
+        finalized_at timestamptz
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_osce_sessions_user_created
+        ON public.osce_sessions (user_id, created_at DESC)`,
+      `CREATE TABLE IF NOT EXISTS public.osce_skill_gaps (
+        id text PRIMARY KEY DEFAULT gen_random_uuid()::text,
+        session_id text NOT NULL REFERENCES public.osce_sessions(id) ON DELETE CASCADE,
+        user_id text NOT NULL REFERENCES public.users(id) ON DELETE CASCADE,
+        competency text NOT NULL,
+        severity text NOT NULL DEFAULT 'medium',
+        evidence text,
+        recommendation text,
+        created_at timestamptz NOT NULL DEFAULT now()
+      )`,
+      `CREATE INDEX IF NOT EXISTS idx_osce_skill_gaps_user_comp
+        ON public.osce_skill_gaps (user_id, competency, created_at DESC)`,
     ]);
   });
 }
